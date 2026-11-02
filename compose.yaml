@@ -1,4 +1,4 @@
-name: ssot2026
+name: ssot2026-proyecto
 
 services:
   postgres:

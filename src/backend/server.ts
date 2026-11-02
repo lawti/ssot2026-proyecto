@@ -6,19 +6,23 @@ import {registerEntityApi} from './api.js';
 import {createAuthentication, registerAuthApi} from './auth.js';
 import {initializeUsers, reportInitialization} from './bootstrap.js';
 import {registerEntityEvents} from './entity-events.js';
+import {registerLandingApi} from './landing.js';
 
 const pool = new Pool(databaseConfig);
 const app = express();
+app.use(express.json());
 const auth = createAuthentication(pool);
 const publish = registerEntityEvents(app, auth);
 registerAuthApi(app, pool, auth);
 registerEntityApi(app, pool, auth, publish);
+registerLandingApi(app);
 
 app.get('/health', async (_, res) => {
     await pool.query('SELECT 1');
     res.json({ok: true});
 });
 app.get('/menu', (_, res) => { res.redirect('/'); });
+app.get('/landing', (_, res) => { res.sendFile('landing.html', {root: fileURLToPath(new URL('../../src/frontend/public', import.meta.url))}); });
 app.use('/assets', express.static(fileURLToPath(new URL('../frontend', import.meta.url))));
 app.use(express.static(fileURLToPath(new URL('../../src/frontend/public', import.meta.url))));
 

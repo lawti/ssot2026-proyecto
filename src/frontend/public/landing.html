@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bienvenido · SSOT 2026</title>
+    <script src="/theme.js"></script>
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        main { justify-content: center; align-items: center; padding: 24px; }
+        .landing { width: min(100%, 480px); text-align: center; }
+        .landing h1 { font-size: 1.8rem; margin: 0 0 8px; }
+        .landing .subtitle { color: var(--text-muted); font-size: 1rem; margin: 0 0 32px; }
+        .landing form { text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px; }
+        .landing textarea { width: 100%; margin-top: 4px; min-height: 100px; resize: vertical; font: inherit; border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; background: var(--surface); color: inherit; }
+        .landing textarea:focus { outline: 2px solid var(--accent-text); outline-offset: 1px; }
+        .landing .form-actions { margin-top: 16px; display: flex; justify-content: space-between; align-items: center; }
+        .landing .response { margin-top: 16px; padding: 12px 16px; border-radius: 6px; font-size: .9rem; }
+        .landing .response.ok { background: var(--accent-soft); color: var(--accent-text); border: 1px solid var(--accent-border); }
+        .landing .response.error { background: var(--danger-soft); color: var(--danger-text); border: 1px solid var(--danger-soft-border); }
+        .landing .nav-link { margin-top: 24px; font-size: .85rem; }
+        .landing .nav-link a { color: var(--accent-text); }
+    </style>
+</head>
+<body>
+    <main>
+        <div class="landing">
+            <header class="page-header" style="justify-content: flex-end; margin-bottom: 16px;">
+                <button id="theme-toggle" type="button" aria-label="Cambiar a tema oscuro" title="Cambiar a tema oscuro" aria-pressed="false"><span aria-hidden="true">☾</span></button>
+            </header>
+
+            <h1>SSOT 2026</h1>
+            <p class="subtitle">Sistema de gestión académica</p>
+
+            <form id="contact-form">
+                <div class="field">
+                    <label for="nombre">Nombre</label>
+                    <input id="nombre" name="nombre" placeholder="Tu nombre (opcional)" autocomplete="name">
+                </div>
+                <div class="field">
+                    <label for="mensaje">Mensaje</label>
+                    <textarea id="mensaje" name="mensaje" placeholder="Escribí tu mensaje…" required></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="primary">Enviar mensaje</button>
+                </div>
+            </form>
+
+            <div id="response" hidden></div>
+
+            <p class="nav-link"><a href="/">Ir a las planillas →</a></p>
+        </div>
+    </main>
+
+    <script>
+        const form = document.getElementById('contact-form');
+        const responseDiv = document.getElementById('response');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            responseDiv.hidden = true;
+
+            const nombre = form.nombre.value;
+            const mensaje = form.mensaje.value;
+
+            try {
+                const res = await fetch('/api/landing/message', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({nombre, mensaje}),
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    responseDiv.textContent = `✓ Mensaje enviado. Gracias, ${data.recibido.nombre}.`;
+                    responseDiv.className = 'response ok';
+                    form.reset();
+                } else {
+                    responseDiv.textContent = `✗ ${data.error}`;
+                    responseDiv.className = 'response error';
+                }
+            } catch {
+                responseDiv.textContent = '✗ Error de conexión. Intentá de nuevo.';
+                responseDiv.className = 'response error';
+            }
+            responseDiv.hidden = false;
+        });
+    </script>
+</body>
+</html>
+
