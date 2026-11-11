@@ -62,10 +62,12 @@ function fechaValida(value: string): boolean {
     return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-const horaValida = (value: string): boolean => /^([01]\d|2[0-3]):(00|30)$/.test(value);
+// Postgres devuelve time como HH:MM:SS; los segundos, si vienen, son siempre :00
+const horaValida = (value: string): boolean => /^([01]\d|2[0-3]):(00|30)(:00)?$/.test(value);
 
 const instanteValido = (value: string): boolean =>
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) && !Number.isNaN(new Date(value).getTime());
+    // ISO 8601 con zona: Z al escribir, +00:00 como lo devuelve Postgres al leer
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/.test(value) && !Number.isNaN(new Date(value).getTime());
 
 const disponibilidadValida = (value: string): boolean =>
     value.length === appTypeDefs.disponibilidad.length && /^[01]*$/.test(value);
@@ -109,7 +111,7 @@ export const inputConstraints = {
     estadoClase: {minLength: null, maxLength: null, options: appTypeDefs.estadoClase.values},
     fecha: {minLength: 10, maxLength: 10},
     hora: {minLength: 5, maxLength: 5},
-    instante: {minLength: 24, maxLength: 24},
+    instante: {minLength: null, maxLength: null},
     disponibilidad: {minLength: appTypeDefs.disponibilidad.length, maxLength: appTypeDefs.disponibilidad.length},
     password: {minLength: appTypeDefs.password.minLength, maxLength: appTypeDefs.password.maxLength},
 } satisfies Record<keyof typeof appTypeDefs, InputConstraints>;

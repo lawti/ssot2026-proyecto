@@ -24,7 +24,12 @@ export async function initializeUsers(pool: Pool, credentials: BootstrapCredenti
         if (!credentials.username || !credentials.password) {
             throw new Error('Configurá AUTH_ADMIN_USERNAME y AUTH_ADMIN_PASSWORD para inicializar la tabla de usuarios vacía.');
         }
-        const input = {usuario: credentials.username, contrasena: credentials.password} satisfies EntityCreate<typeof authenticationEntity>;
+        // El primer usuario es el administrador: un rol sin fila de subtipo (no es alumno ni docente).
+        const input = {
+            usuario: credentials.username, contrasena: credentials.password,
+            nombre: 'Administrador', apellido: credentials.username, rol: 'administrador',
+            email: null, telefono: null, fecha_nacimiento: null,
+        } satisfies EntityCreate<typeof authenticationEntity>;
         const row = await prepareEntityWrite(entity, input, 'create');
         const recovery = createRecoveryCodes();
         Object.assign(row, {recuperacion_hashes: recovery.hashes} satisfies Partial<StoredRow<typeof authenticationEntity>>);

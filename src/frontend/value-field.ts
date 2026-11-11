@@ -36,8 +36,36 @@ const editors = {
     },
     integer: integerEditor,
     posInteger: integerEditor,
-    regularidad: enumEditor,
-    cuatrimestre: enumEditor,
+    rol: enumEditor,
+    nivelAcademico: enumEditor,
+    diaSemana: enumEditor,
+    estadoClase: enumEditor,
+    // input date ya trabaja en YYYY-MM-DD, la misma forma serializada del tipo fecha
+    fecha: (_constraints) => {
+        const input = element('input');
+        input.type = 'date';
+        return {input, read: () => input.value, requiredWhenEnabled: true};
+    },
+    // step de media hora, alineado con la disponibilidad
+    hora: (_constraints) => {
+        const input = element('input');
+        input.type = 'time';
+        input.step = '1800';
+        return {input, read: () => input.value, requiredWhenEnabled: true};
+    },
+    instante: constraints => {
+        const input = element('input');
+        input.placeholder = 'AAAA-MM-DDTHH:MM:SS.sssZ';
+        input.maxLength = constraints.maxLength ?? 524288;
+        return {input, read: () => input.value, requiredWhenEnabled: true};
+    },
+    disponibilidad: constraints => {
+        const input = element('input');
+        input.minLength = constraints.minLength ?? 0;
+        input.maxLength = constraints.maxLength ?? 524288;
+        input.pattern = '[01]*';
+        return {input, read: () => input.value, requiredWhenEnabled: true};
+    },
     boolean: (_constraints) => {
         const input = element('select');
         input.add(new Option('No', 'false'));
