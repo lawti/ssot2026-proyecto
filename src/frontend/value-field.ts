@@ -38,8 +38,11 @@ const editors = {
     posInteger: integerEditor,
     rol: enumEditor,
     nivelAcademico: enumEditor,
-    diaSemana: enumEditor,
     estadoClase: enumEditor,
+    estadoSolicitud: enumEditor,
+    estadoAmistad: enumEditor,
+    estadoSolicitante: enumEditor,
+    estadoParticipante: enumEditor,
     // input date ya trabaja en YYYY-MM-DD, la misma forma serializada del tipo fecha
     fecha: (_constraints) => {
         const input = element('input');

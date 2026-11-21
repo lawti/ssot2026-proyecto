@@ -15,7 +15,7 @@ const fetch = (url, options = {}) => globalThis.fetch(url, {...options,
 
 async function startApi(t, query) {
     const app = express();
-    const user = {id: 'admin', usuario: 'admin', version_sesion: 'test-version'};
+    const user = {id: 'admin', usuario: 'admin', rol: 'administrador', version_sesion: 'test-version'};
     const auth = createAuthentication({query: async () => ({rows: [user]})}, 'test-only-secret-with-at-least-32-bytes');
     registerEntityApi(app, typeof query === 'function' ? {query, connect: async () => { throw new Error('Unexpected transaction'); }} : query, auth);
     const server = await new Promise(resolve => {
@@ -40,66 +40,70 @@ test('entity discovery comes from the SSOT and needs no database query', async t
     }
 });
 
+
+const regla = {clase: 'c1', fecha_inicio: '2026-03-02', hora_inicio: '18:00', hora_fin: '19:30', intervalo: 1, repeticiones: 4};
+const reglaKey = row => Object.fromEntries(myEntities.reglas_horarias.pk.map(name => [name, row[name]]));
+
 test('entity data preserves JSON value types and exposes only display metadata', async t => {
     let sql;
-    const base = await startApi(t, async text => {
-        sql = text;
-        return entityResult([{cod_mat: 'ALG', cod_dep: 'DM', materia: 'Álgebra', plan: 2026, obligatoria: false, private_extra: 'omit'}]);
+    const base = await startApi(t, async query => {
+        sql = query;
+        return entityResult([{...regla, repeticiones: null, private_extra: 'omit'}]);
     });
-    const response = await fetch(`${base}/api/entities/materias`);
+    const response = await fetch(`${base}/api/entities/reglas_horarias`);
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), {
-        name: 'materias',
-        label: 'Materias', browsing, window: {kind: 'complete'}, versions: ['1'],
-        pk: ['cod_mat', 'cod_dep'],
-        columns: [
-            {name: 'cod_mat', label: 'Código', type: 'text', nullable: false, writable: true, constraints: {minLength: null, maxLength: null}},
-            {name: 'cod_dep', label: 'Código de departamento', type: 'text', nullable: false, writable: true, constraints: {minLength: null, maxLength: null}},
-            {name: 'materia', label: 'Materia', type: 'text', nullable: true, writable: true, constraints: {minLength: null, maxLength: null}},
-            {name: 'plan', label: 'Plan', type: 'integer', nullable: true, writable: true, constraints: {minLength: null, maxLength: null}},
-            {name: 'obligatoria', label: 'Obligatoria', type: 'boolean', nullable: true, writable: true, constraints: {minLength: null, maxLength: null}},
-        ],
-        inputs: [
-            {name: 'cod_mat', label: 'Código', type: 'text', nullable: false, constraints: {minLength: null, maxLength: null}, optionalOnUpdate: false},
-            {name: 'cod_dep', label: 'Código de departamento', type: 'text', nullable: false, constraints: {minLength: null, maxLength: null}, optionalOnUpdate: false},
-            {name: 'materia', label: 'Materia', type: 'text', nullable: true, constraints: {minLength: null, maxLength: null}, optionalOnUpdate: false},
-            {name: 'plan', label: 'Plan', type: 'integer', nullable: true, constraints: {minLength: null, maxLength: null}, optionalOnUpdate: false},
-            {name: 'obligatoria', label: 'Obligatoria', type: 'boolean', nullable: true, constraints: {minLength: null, maxLength: null}, optionalOnUpdate: false},
-        ],
-        foreignKeys: [
-            {name: 'plan', entity: 'planes', fields: {plan: 'plan'}, displayFields: ['plan', 'descripcion']},
-            {name: 'departamento', entity: 'departamentos', fields: {cod_dep: 'cod_dep'}, displayFields: ['cod_dep', 'departamento']},
-        ],
-        rows: [{cod_mat: 'ALG', cod_dep: 'DM', materia: 'Álgebra', plan: 2026, obligatoria: false}],
+    const body = await response.json();
+    const {columns, inputs, ...rest} = body;
+    assert.deepEqual(rest, {
+        name: 'reglas_horarias',
+        label: 'Reglas horarias', browsing, window: {kind: 'complete'}, versions: ['1'],
+        pk: ['clase', 'fecha_inicio', 'hora_inicio'],
+        foreignKeys: [{name: 'clase', entity: 'clases', fields: {clase: 'id'}, displayFields: ['id', 'materia', 'ubicacion']}],
+        rows: [{...regla, repeticiones: null}],
     });
-    assert.match(sql, /SELECT "cod_mat", "cod_dep", "materia", "plan", "obligatoria"/);
-    assert.match(sql, /FROM "ssot"\."materias"/);
-    assert.match(sql, /ORDER BY "cod_mat" COLLATE "C" asc NULLS LAST, "cod_dep" COLLATE "C" asc NULLS LAST/);
+    assert.deepEqual(columns.map(({name, type, nullable, writable}) => ({name, type, nullable, writable})), [
+        {name: 'clase', type: 'text', nullable: false, writable: true},
+        {name: 'fecha_inicio', type: 'fecha', nullable: false, writable: true},
+        {name: 'hora_inicio', type: 'hora', nullable: false, writable: true},
+        {name: 'hora_fin', type: 'hora', nullable: false, writable: true},
+        {name: 'intervalo', type: 'posInteger', nullable: false, writable: true},
+        {name: 'repeticiones', type: 'posInteger', nullable: true, writable: true},
+    ]);
+    assert.deepEqual(Object.keys(columns[0]), ['name', 'label', 'type', 'nullable', 'writable', 'constraints']);
+    assert.deepEqual(inputs.map(input => input.name), columns.map(column => column.name));
+    assert.deepEqual(Object.keys(inputs[0]), ['name', 'label', 'type', 'nullable', 'constraints', 'optionalOnUpdate']);
+    // app metadata that is not display metadata stays in the backend
+    assert.doesNotMatch(JSON.stringify(body), /requeridoPorReferido|validators|private_extra/);
+    assert.match(sql, /SELECT "clase", "fecha_inicio", "hora_inicio", "hora_fin", "intervalo", "repeticiones"/);
+    assert.match(sql, /FROM "ssot"\."reglas_horarias"/);
+    assert.match(sql, /ORDER BY "clase" COLLATE "C" asc NULLS LAST, "fecha_inicio" asc NULLS LAST, "hora_inicio" asc NULLS LAST/);
 });
 
 test('empty entities still return their columns', async t => {
     const base = await startApi(t, async () => entityResult([]));
-    const response = await fetch(`${base}/api/entities/pabellones`);
+    const response = await fetch(`${base}/api/entities/clases`);
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.equal(body.name, 'pabellones');
+    assert.equal(body.name, 'clases');
     assert.deepEqual(body.rows, []);
-    assert.deepEqual(body.columns.map(column => column.name), ['pab', 'pabellon', 'pisos']);
-    assert.equal(body.columns[2].type, 'integer');
+    // the generated id is hidden; the inherited dictado key is shown
+    assert.deepEqual(body.columns.map(column => column.name), ['docente', 'materia', 'presencial', 'ubicacion', 'estado']);
+    assert.equal(body.columns[2].type, 'boolean');
 });
 
 test('database errors and rows inconsistent with the SSOT return a JSON error', async t => {
+    const clase = {id: 'c1', docente: 'd1', materia: 'Álgebra', presencial: true, ubicacion: 'Aula 3', estado: 'pendiente'};
     const rows = [
-        {cod_mat: 'TEST', cod_dep: 'DC', materia: 'Wrong boolean', plan: null, obligatoria: 'true'},
-        {cod_mat: null, cod_dep: 'DC', materia: null, plan: null, obligatoria: true},
-        {materia: 'Missing nullable field', obligatoria: null},
+        {...clase, presencial: 'true'},
+        {...clase, id: null},
+        {id: 'c1', ubicacion: 'Missing required fields'},
     ];
     const base = await startApi(t, async () => {
         if (rows.length) return entityResult([rows.shift()]);
         throw new Error('Internal database details');
     });
     for (let index = 0; index < 4; index++) {
-        const response = await fetch(`${base}/api/entities/materias`);
+        const response = await fetch(`${base}/api/entities/clases`);
         assert.equal(response.status, 500);
         assert.deepEqual(await response.json(), {error: 'No se pudieron procesar los datos.'});
     }
@@ -118,114 +122,124 @@ test('positive integers and enums validate parsed values without coercion', () =
     for (const value of [0, -1, 1.5, NaN, Infinity, '1', true, null]) assert.equal(positive.check(value), false);
     for (const text of ['0', '-1', '1.5', '', 'Infinity', '9'.repeat(400)]) assert.equal(positive.deserialize(text).ok, false);
     for (const [type, values, invalid] of [
-        ['regularidad', ['Libre', 'Regular'], ['libre', 'Regular ', '', 'Otro']],
-        ['cuatrimestre', ['1C', '2C'], ['1', '3C', '1c', '']],
+        ['estadoSolicitud', ['abierta', 'rechazada'], ['Abierta', 'cerrada', '']],
+        ['estadoAmistad', ['pendiente', 'bloqueada'], ['Bloqueada', 'bloqueado', '']],
+        ['estadoClase', ['pendiente', 'cancelada'], ['Pendiente', 'borrador', '']],
     ]) {
         const behaviour = appTypeBehaviours[type];
         for (const value of values) {
             assert.equal(behaviour.check(value), true);
             assert.deepEqual(behaviour.deserialize(behaviour.serialize(value)), {ok: true, value});
         }
-        for (const text of invalid) {
-            assert.equal(behaviour.check(text), false);
-            assert.equal(behaviour.deserialize(text).ok, false);
+        for (const invalidText of invalid) {
+            assert.equal(behaviour.check(invalidText), false);
+            assert.equal(behaviour.deserialize(invalidText).ok, false);
         }
         assert.equal(behaviour.check(1), false);
     }
 });
 
-test('enrollment metadata supplies the positive minimum and enum choices to editors', async t => {
+test('schedule rule metadata supplies the positive minimum and enum choices to editors', async t => {
     const base = await startApi(t, async () => entityResult([]));
-    const response = await fetch(`${base}/api/entities/enrolamientos`);
+    const response = await fetch(`${base}/api/entities/reglas_horarias`);
     assert.equal(response.status, 200);
     const {inputs} = await response.json();
     const input = name => inputs.find(column => column.name === name);
-    assert.equal(input('año').type, 'posInteger');
-    assert.equal(input('año').constraints.minimum, 1);
-    assert.equal(input('año').nullable, false);
-    assert.equal(input('cuatrimestre').type, 'cuatrimestre');
-    assert.deepEqual(input('cuatrimestre').constraints.options, ['1C', '2C']);
-    assert.equal(input('cuatrimestre').nullable, false);
-    assert.equal(input('regularidad').type, 'regularidad');
-    assert.deepEqual(input('regularidad').constraints.options, ['Libre', 'Regular']);
-    assert.equal(input('regularidad').nullable, true);
+    assert.equal(input('intervalo').type, 'posInteger');
+    assert.equal(input('intervalo').constraints.minimum, 1);
+    assert.equal(input('intervalo').nullable, false);
+    assert.equal(input('repeticiones').type, 'posInteger');
+    assert.equal(input('repeticiones').nullable, true);
+    assert.equal(input('dia'), undefined, 'the weekday comes from fecha_inicio');
 });
 
-const enrollment = {legajo: '123', cod_mat: 'ALG', cod_dep: 'DM', año: 2026, cuatrimestre: '1C', nota: null, regularidad: 'Libre'};
-const enrollmentKey = row => Object.fromEntries(myEntities.enrolamientos.pk.map(name => [name, row[name]]));
+test('friendship and subject request states offer their enum choices to editors', async t => {
+    const base = await startApi(t, async () => entityResult([]));
+    for (const [name, options] of [
+        ['amistades', ['pendiente', 'aceptada', 'rechazada', 'bloqueada']],
+        ['solicitudes', ['abierta', 'aceptada', 'rechazada', 'retirada']],
+    ]) {
+        const {inputs} = await (await fetch(`${base}/api/entities/${name}`)).json();
+        const estado = inputs.find(column => column.name === 'estado');
+        assert.deepEqual(estado.constraints.options, options);
+        assert.equal(estado.nullable, false);
+    }
+});
 
-test('invalid enrollment values and keys are rejected before querying on create, update and delete', async t => {
+test('invalid schedule rule values and keys are rejected before querying on create, update and delete', async t => {
     let calls = 0;
     const base = await startApi(t, async () => { calls++; return {rowCount: 1}; });
-    const key = enrollmentKey(enrollment);
+    const key = reglaKey(regla);
     for (const [field, values] of [
-        ['año', [0, -1, 1.5, '2026', null]],
-        ['cuatrimestre', [1, '1', '3C', '1c', null]],
-        ['regularidad', ['libre', 'Regular ', 'Otro', 1]],
+        ['intervalo', [0, -1, 1.5, '2', null]],
+        ['fecha_inicio', ['2026-02-30', '02/03/2026', 1, null]],
+        ['repeticiones', [0, -1, 1.5, '4']],
     ]) {
         for (const value of values) {
-            const row = {...enrollment, [field]: value};
+            const row = {...regla, [field]: value};
             for (const [method, body] of [['POST', row], ['PUT', {key, row, version: '1'}]]) {
-                const response = await send(base, 'enrolamientos', method, body);
+                const response = await send(base, 'reglas_horarias', method, body);
                 assert.equal(response.status, 400, `${method} ${field}=${value}`);
                 assert.ok((await response.json()).problems.some(problem => problem.field === field));
             }
-            if (field !== 'regularidad') {
+            if (field in key) {
                 const invalidKey = {...key, [field]: value};
-                assert.equal((await send(base, 'enrolamientos', 'DELETE', invalidKey)).status, 400);
-                assert.equal((await send(base, 'enrolamientos', 'PUT', {key: invalidKey, row: enrollment, version: '1'})).status, 400);
+                assert.equal((await send(base, 'reglas_horarias', 'DELETE', invalidKey)).status, 400);
+                assert.equal((await send(base, 'reglas_horarias', 'PUT', {key: invalidKey, row: regla, version: '1'})).status, 400);
             }
         }
     }
     assert.equal(calls, 0);
 });
 
-test('valid enrollment enums, positive year boundary and nullable regularidad retain their values', async t => {
+test('valid enums, positive boundary and endless repetitions retain their values', async t => {
     const queries = [];
     const base = await startApi(t, async (sql, values) => { queries.push({sql, values}); return {rowCount: 1}; });
-    for (const regularidad of ['Libre', 'Regular', null]) {
-        const row = {...enrollment, año: 1, regularidad};
-        assert.equal((await send(base, 'enrolamientos', 'POST', row)).status, 204);
+    for (const repeticiones of [4, 1, null]) {
+        const row = {...regla, intervalo: 1, repeticiones};
+        assert.equal((await send(base, 'reglas_horarias', 'POST', row)).status, 204);
         assert.deepEqual(queries.at(-1).values, Object.values(row));
-        const updated = {...row, cuatrimestre: '2C'};
-        assert.equal((await send(base, 'enrolamientos', 'PUT', {key: enrollmentKey(row), row: updated, version: '1'})).status, 204);
-        assert.deepEqual(queries.at(-1).values, [...Object.values(updated), ...Object.values(enrollmentKey(row)), '1']);
+        const updated = {...row, fecha_inicio: '2026-03-03'};
+        assert.equal((await send(base, 'reglas_horarias', 'PUT', {key: reglaKey(row), row: updated, version: '1'})).status, 204);
+        assert.deepEqual(queries.at(-1).values, [...Object.values(updated), ...Object.values(reglaKey(row)), '1']);
     }
 });
 
 test('CRUD uses parameters and targets the original key when the key is edited', async t => {
     const queries = [];
     const base = await startApi(t, async (sql, values) => { queries.push({sql, values}); return {rowCount: 1}; });
-    const row = {cod_mat: '', cod_dep: 'DC', materia: "O'Reilly <script>", plan: 0, obligatoria: false};
-    assert.equal((await send(base, 'materias', 'POST', row)).status, 204);
+    const materia = "O'Reilly <script>";
+    assert.equal((await send(base, 'materias', 'POST', {materia})).status, 204);
     assert.match(queries[0].sql, /^INSERT INTO "ssot"\."materias"/);
-    assert.deepEqual(queries[0].values, ['', 'DC', row.materia, 0, false]);
-    assert.ok(!queries[0].sql.includes(row.materia));
-    assert.equal((await send(base, 'materias', 'PUT', {key: {cod_mat: '', cod_dep: 'DC'}, version: '1', row: {...row, cod_mat: 'RENAMED', materia: 'Renamed', plan: null}})).status, 204);
-    assert.match(queries[1].sql, /WHERE "cod_mat" = \$6 AND "cod_dep" = \$7 AND xmin::text = \$8$/);
-    assert.deepEqual(queries[1].values, ['RENAMED', 'DC', 'Renamed', null, false, '', 'DC', '1']);
-    assert.equal((await send(base, 'materias', 'DELETE', {cod_mat: 'RENAMED', cod_dep: 'DC'})).status, 204);
-    assert.match(queries[2].sql, /^DELETE FROM "ssot"\."materias" WHERE "cod_mat" = \$1 AND "cod_dep" = \$2$/);
-    assert.deepEqual(queries[2].values, ['RENAMED', 'DC']);
-    assert.equal((await send(base, 'planes', 'POST', {plan: 42, descripcion: null})).status, 204);
-    assert.deepEqual(queries[3].values, [42, null]);
+    assert.deepEqual(queries[0].values, [materia]);
+    assert.ok(!queries[0].sql.includes(materia));
+    assert.equal((await send(base, 'materias', 'PUT', {key: {materia}, version: '1', row: {materia: 'Renamed'}})).status, 204);
+    assert.match(queries[1].sql, /WHERE "materia" = \$2 AND xmin::text = \$3$/);
+    assert.deepEqual(queries[1].values, ['Renamed', materia, '1']);
+    assert.equal((await send(base, 'materias', 'DELETE', {materia: 'Renamed'})).status, 204);
+    assert.match(queries[2].sql, /^DELETE FROM "ssot"\."materias" WHERE "materia" = \$1$/);
+    assert.deepEqual(queries[2].values, ['Renamed']);
+    assert.equal((await send(base, 'dictados', 'POST', {docente: '', materia: 'Álgebra'})).status, 204);
+    assert.deepEqual(queries[3].values, ['', 'Álgebra']);
 });
 
 test('invalid shapes, types, keys and SSOT business rules fail before querying', async t => {
     let calls = 0;
     const base = await startApi(t, async () => { calls++; return {rowCount: 1}; });
-    const row = {cod_mat: 'TEST', cod_dep: 'DC', materia: 'Test', plan: null, obligatoria: false};
-    for (const body of [null, [], {}, {...row, cod_mat: null}, {...row, cod_dep: null}, {...row, plan: '2026'}, {...row, obligatoria: 'false'}, {...row, extra: true}, {...row, plan: 1993, obligatoria: true}]) {
-        const response = await send(base, 'materias', 'POST', body);
+    const row = regla;
+    for (const body of [null, [], {}, {...row, clase: null}, {...row, fecha_inicio: null}, {...row, intervalo: '2'},
+        {...row, extra: true}, {...row, hora_fin: '17:00'}]) {
+        const response = await send(base, 'reglas_horarias', 'POST', body);
         assert.equal(response.status, 400);
         assert.equal(typeof (await response.json()).error, 'string');
     }
-    for (const key of [{}, {cod_mat: null, cod_dep: 'DC'}, {cod_mat: 'TEST'}, {cod_mat: 'TEST', cod_dep: 'DC', extra: true}]) {
-        assert.equal((await send(base, 'materias', 'DELETE', key)).status, 400);
-        assert.equal((await send(base, 'materias', 'PUT', {key, row, version: '1'})).status, 400);
+    const key = reglaKey(row);
+    for (const invalidKey of [{}, {...key, clase: null}, {clase: 'c1'}, {...key, extra: true}]) {
+        assert.equal((await send(base, 'reglas_horarias', 'DELETE', invalidKey)).status, 400);
+        assert.equal((await send(base, 'reglas_horarias', 'PUT', {key: invalidKey, row, version: '1'})).status, 400);
     }
-    assert.equal((await send(base, 'materias', 'PUT', row)).status, 400);
-    assert.equal((await fetch(`${base}/api/entities/materias`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{'})).status, 400);
+    assert.equal((await send(base, 'reglas_horarias', 'PUT', row)).status, 400);
+    assert.equal((await fetch(`${base}/api/entities/reglas_horarias`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{'})).status, 400);
     assert.equal(calls, 0);
 });
 
@@ -234,30 +248,29 @@ test('missing rows and constraint conflicts have useful, non-sensitive errors', 
         if (sql.startsWith('INSERT')) throw Object.assign(new Error('Internal query and credentials'), {code: '23505'});
         return {rowCount: 0};
     });
-    assert.equal((await send(base, 'planes', 'PUT', {key: {plan: 1}, version: '1', row: {plan: 2, descripcion: null}})).status, 409);
-    assert.equal((await send(base, 'planes', 'DELETE', {plan: 1})).status, 404);
-    const conflict = await send(base, 'planes', 'POST', {plan: 1, descripcion: null});
+    assert.equal((await send(base, 'materias', 'PUT', {key: {materia: 'Álgebra'}, version: '1', row: {materia: 'Física'}})).status, 409);
+    assert.equal((await send(base, 'materias', 'DELETE', {materia: 'Álgebra'})).status, 404);
+    const conflict = await send(base, 'materias', 'POST', {materia: 'Álgebra'});
     assert.equal(conflict.status, 409);
     assert.deepEqual(await conflict.json(), {error: 'Ya existe un registro con esa clave.'});
 });
 
 test('referenced key changes explain the dependent entity without exposing database details', async t => {
-    let referencingTable = 'enrolamientos';
+    let referencingTable = 'dictados';
     const base = await startApi(t, async () => {
         throw Object.assign(new Error('Internal SQL and submitted values'), {
             code: '23503', table: referencingTable, detail: 'Sensitive record contents',
         });
     });
-    const row = {cod_mat: 'ARIA', cod_dep: 'DC', materia: 'Arquitectura', plan: null, obligatoria: false};
-    const update = {key: {cod_mat: 'ARI', cod_dep: 'DC'}, row, version: '1'};
+    const update = {key: {materia: 'Álgebra'}, row: {materia: 'Álgebra II'}, version: '1'};
     for (let attempt = 0; attempt < 2; attempt++) {
         const response = await send(base, 'materias', 'PUT', update);
         assert.equal(response.status, 409);
         assert.deepEqual(await response.json(), {
-            error: 'No se puede cambiar la clave porque hay registros en Inscripciones que utilizan esta fila. Tu borrador se conserva; podés corregir la clave o cancelar los cambios.',
+            error: 'No se puede cambiar la clave porque hay registros en Materias que ofrece cada docente que utilizan esta fila. Tu borrador se conserva; podés corregir la clave o cancelar los cambios.',
         });
     }
-    const unchangedKey = await send(base, 'materias', 'PUT', {...update, row: {...row, cod_mat: 'ARI'}});
+    const unchangedKey = await send(base, 'materias', 'PUT', {...update, row: {materia: 'Álgebra'}});
     assert.deepEqual(await unchangedKey.json(), {error: 'El registro tiene una referencia inválida o está siendo utilizado.'});
     // An outgoing or unknown constraint must not be misreported as a dependent row.
     for (referencingTable of ['materias', 'unknown']) {
@@ -271,48 +284,40 @@ test('delete dependency checks report simple and composite SSOT foreign keys', a
     const queries = [];
     const base = await startApi(t, async (sql, values) => {
         queries.push({sql, values});
-        const dependentRows = sql.includes('FROM "ssot"."enrolamientos"')
-            ? [{legajo: '123', cod_mat: 'ALG', cod_dep: 'DM', año: 2026, cuatrimestre: '1C'}]
-            : [{cod_mat: 'ALG', cod_dep: 'DM'}];
-        const count = sql.includes('FROM "ssot"."enrolamientos"') ? 2 : 1;
-        return {rows: [{count, keys: dependentRows}]};
+        const clases = sql.includes('FROM "ssot"."clases"');
+        return {rows: [{count: clases ? 2 : 1, keys: clases ? [{id: 'c1'}] : [{docente: 'd1', materia: 'Álgebra'}]}]};
     });
-    const composite = await fetch(`${base}/api/entities/materias/delete-check`, {
+    const composite = await fetch(`${base}/api/entities/dictados/delete-check`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({keys: [{cod_mat: 'ALG', cod_dep: 'DM'}]}),
+        body: JSON.stringify({keys: [{docente: 'd1', materia: 'Álgebra'}]}),
     });
     assert.equal(composite.status, 200);
     assert.deepEqual(await composite.json(), {
-        blockers: [{
-            entity: 'enrolamientos',
-            relationship: 'materia',
-            count: 2,
-            keys: [{legajo: '123', cod_mat: 'ALG', cod_dep: 'DM', año: 2026, cuatrimestre: '1C'}],
-        }],
+        blockers: [{entity: 'clases', relationship: 'dictado', count: 2, keys: [{id: 'c1'}]}],
     });
     assert.match(queries[0].sql, /LIMIT 10/);
-    assert.match(queries[0].sql, /SELECT DISTINCT dependent\."legajo", dependent\."cod_mat", dependent\."cod_dep", dependent\."año", dependent\."cuatrimestre"/);
+    assert.match(queries[0].sql, /SELECT DISTINCT dependent\."id" FROM/);
     assert.doesNotMatch(queries[0].sql, /SELECT DISTINCT dependent\.\*/);
-    assert.match(queries[0].sql, /dependent\."cod_mat" = target\."cod_mat" AND dependent\."cod_dep" = target\."cod_dep"/);
-    assert.deepEqual(queries[0].values, ['ALG', 'DM']);
+    assert.match(queries[0].sql, /dependent\."docente" = target\."docente" AND dependent\."materia" = target\."materia"/);
+    assert.deepEqual(queries[0].values, ['d1', 'Álgebra']);
 
-    const simple = await fetch(`${base}/api/entities/planes/delete-check`, {
+    const simple = await fetch(`${base}/api/entities/materias/delete-check`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({keys: [{plan: 2026}]}),
+        body: JSON.stringify({keys: [{materia: 'Álgebra'}]}),
     });
     assert.equal(simple.status, 200);
     assert.deepEqual(await simple.json(), {
-        blockers: [{entity: 'materias', relationship: 'plan', count: 1, keys: [{cod_mat: 'ALG', cod_dep: 'DM'}]}],
+        blockers: [{entity: 'dictados', relationship: 'materia', count: 1, keys: [{docente: 'd1', materia: 'Álgebra'}]}],
     });
 });
 
 test('bulk delete rejects malformed and duplicate selections before querying', async t => {
     let calls = 0;
     const base = await startApi(t, async () => { calls++; return {rows: []}; });
-    for (const keys of [[], [{plan: '2026'}], [{plan: 2026}, {plan: 2026}]]) {
-        const response = await fetch(`${base}/api/entities/planes/bulk-delete`, {
+    for (const keys of [[], [{materia: 1}], [{materia: 'Álgebra'}, {materia: 'Álgebra'}]]) {
+        const response = await fetch(`${base}/api/entities/materias/bulk-delete`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({keys}),
@@ -328,8 +333,8 @@ test('bulk delete rolls the whole selection back when any row has dependents', a
         async query(sql) {
             statements.push(sql);
             if (sql === 'BEGIN' || sql === 'ROLLBACK') return {rowCount: null, rows: []};
-            if (sql.includes('FOR UPDATE')) return {rowCount: 2, rows: [{cod_mat: 'ALG'}, {cod_mat: 'FIS'}]};
-            if (sql.startsWith('WITH matching')) return {rows: [{count: 1, keys: [{legajo: '123'}]}]};
+            if (sql.includes('FOR UPDATE')) return {rowCount: 2, rows: [{materia: 'Álgebra'}, {materia: 'Física'}]};
+            if (sql.startsWith('WITH matching')) return {rows: [{count: 1, keys: [{docente: 'd1', materia: 'Álgebra'}]}]};
             if (sql.startsWith('DELETE')) return {rowCount: 2, rows: []};
             throw new Error('Unexpected query in bulk-delete test');
         },
@@ -339,10 +344,10 @@ test('bulk delete rolls the whole selection back when any row has dependents', a
     const response = await fetch(`${base}/api/entities/materias/bulk-delete`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({keys: [{cod_mat: 'ALG', cod_dep: 'DM'}, {cod_mat: 'FIS', cod_dep: 'DM'}]}),
+        body: JSON.stringify({keys: [{materia: 'Álgebra'}, {materia: 'Física'}]}),
     });
     assert.equal(response.status, 409);
-    assert.match((await response.json()).error, /enrolamientos \(materia\): 1/);
+    assert.match((await response.json()).error, /dictados \(materia\): 1/);
     assert.ok(statements.includes('ROLLBACK'));
     assert.ok(!statements.some(sql => sql.startsWith('DELETE')));
 });
@@ -353,21 +358,76 @@ test('bulk delete removes all selected rows in one transaction when unreferenced
         async query(sql) {
             statements.push(sql);
             if (sql === 'BEGIN' || sql === 'COMMIT') return {rowCount: null, rows: []};
-            if (sql.includes('FOR UPDATE')) return {rowCount: 2, rows: [{plan: 2026}, {plan: 2027}]};
+            if (sql.includes('FOR UPDATE')) return {rowCount: 2, rows: [{materia: 'Álgebra'}, {materia: 'Física'}]};
             if (sql.startsWith('WITH matching')) return {rows: [{count: 0, keys: []}]};
-            if (sql.startsWith('DELETE')) return {rowCount: 2, rows: [{plan: 2026}, {plan: 2027}]};
+            if (sql.startsWith('DELETE')) return {rowCount: 2, rows: [{materia: 'Álgebra'}, {materia: 'Física'}]};
             throw new Error('Unexpected query in bulk-delete test');
         },
         release() {},
     };
     const base = await startApi(t, {query: async () => ({rows: []}), connect: async () => client});
-    const response = await fetch(`${base}/api/entities/planes/bulk-delete`, {
+    const response = await fetch(`${base}/api/entities/materias/bulk-delete`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({keys: [{plan: 2026}, {plan: 2027}]}),
+        body: JSON.stringify({keys: [{materia: 'Álgebra'}, {materia: 'Física'}]}),
     });
     assert.equal(response.status, 204);
     assert.ok(statements.includes('COMMIT'));
     assert.equal(statements.filter(sql => sql.startsWith('DELETE')).length, 1);
     assert.equal(statements.at(-1), 'COMMIT');
+});
+
+test('row rules keep the request state, closing date and friendship sender consistent', async t => {
+    let calls = 0;
+    const base = await startApi(t, async () => { calls++; return {rowCount: 1}; });
+    const solicitud = {materia: 'Astronomía', estado: 'abierta', fecha_cierre: null};
+    const cierre = '2026-11-20T12:00:00.000Z';
+    for (const row of [{...solicitud, fecha_cierre: cierre}, {...solicitud, estado: 'aceptada'}, {...solicitud, estado: 'rechazada'}]) {
+        const response = await send(base, 'solicitudes', 'POST', row);
+        assert.equal(response.status, 400, JSON.stringify(row));
+        assert.ok((await response.json()).problems.some(problem => problem.messageKey === 'solicitud.cierreSegunEstado'));
+    }
+    const amistad = {alumno_a: 'a1', alumno_b: 'a2', enviada_por: 'a3', estado: 'pendiente'};
+    const response = await send(base, 'amistades', 'POST', amistad);
+    assert.equal(response.status, 400);
+    assert.ok((await response.json()).problems.some(problem => problem.messageKey === 'amistad.enviadaPorIntegrante'));
+    assert.equal(calls, 0);
+    for (const [name, row] of [['solicitudes', solicitud], ['solicitudes', {...solicitud, estado: 'aceptada', fecha_cierre: cierre}],
+        ['amistades', {...amistad, enviada_por: 'a2'}]]) {
+        assert.equal((await send(base, name, 'POST', row)).status, 204, JSON.stringify(row));
+    }
+});
+
+test('a cancelled repetition names an occurrence of its schedule rule and keeps who cancelled it and why', async t => {
+    const queries = [];
+    const base = await startApi(t, async (sql, values) => { queries.push({sql, values}); return {...entityResult([]), rowCount: 1}; });
+    const response = await fetch(`${base}/api/entities/cancelaciones`);
+    const {pk, inputs, foreignKeys} = await response.json();
+    assert.deepEqual(pk, ['clase', 'fecha_inicio', 'hora_inicio', 'fecha']);
+    assert.deepEqual(inputs.map(input => input.name), ['clase', 'fecha_inicio', 'hora_inicio', 'fecha', 'motivo', 'cancelada_por']);
+    assert.deepEqual(foreignKeys.map(({name, entity, fields}) => ({name, entity, fields})), [
+        {name: 'regla', entity: 'reglas_horarias', fields: {clase: 'clase', fecha_inicio: 'fecha_inicio', hora_inicio: 'hora_inicio'}},
+        {name: 'cancelada_por', entity: 'usuarios', fields: {cancelada_por: 'id'}},
+    ]);
+    const cancelacion = {clase: 'c1', fecha_inicio: '2026-03-02', hora_inicio: '18:00', fecha: '2026-03-16', motivo: 'Feriado', cancelada_por: 'u1'};
+    const before = queries.length;
+    for (const fecha of ['2026-02-23', '2026-03-03', '2026-03-15']) {
+        const rejected = await send(base, 'cancelaciones', 'POST', {...cancelacion, fecha});
+        assert.equal(rejected.status, 400, fecha);
+        assert.ok((await rejected.json()).problems.some(problem => problem.messageKey === 'cancelacion.noEsOcurrencia'));
+    }
+    assert.equal((await send(base, 'cancelaciones', 'POST', {...cancelacion, motivo: null})).status, 400);
+    assert.equal(queries.length, before);
+    for (const fecha of ['2026-03-02', '2026-03-16']) {
+        assert.equal((await send(base, 'cancelaciones', 'POST', {...cancelacion, fecha})).status, 204, fecha);
+    }
+});
+
+test('withdrawing keeps the requester row, and a request withdrawn by everyone is closed', async t => {
+    const base = await startApi(t, async () => ({...entityResult([]), rowCount: 1}));
+    const {inputs} = await (await fetch(`${base}/api/entities/solicitantes`)).json();
+    assert.deepEqual(inputs.find(input => input.name === 'estado').constraints.options, ['activo', 'retirado']);
+    const solicitud = {materia: 'Astronomía', estado: 'retirada', fecha_cierre: null};
+    assert.equal((await send(base, 'solicitudes', 'POST', solicitud)).status, 400);
+    assert.equal((await send(base, 'solicitudes', 'POST', {...solicitud, fecha_cierre: '2026-11-20T12:00:00.000Z'})).status, 204);
 });

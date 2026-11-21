@@ -32,6 +32,8 @@ type MyFieldDef = CoreFieldDef<typeof appTypeDefs> & {
     onCreate?: 'uuid' | 'now' | 'empty-array' | null
     onUpdate?: 'uuid' | null
     onPasswordChange?: 'empty-array' | null
+    // en un campo de fk: toda fila referida tiene que tener al menos una fila de esta entidad
+    requeridoPorReferido?: boolean
 }
 
 const myTypes = defineTypes({
@@ -54,6 +56,7 @@ const myTypes = defineTypes({
         onCreate   : fieldDef.onCreate ?? null,
         onUpdate   : fieldDef.onUpdate ?? null,
         onPasswordChange: fieldDef.onPasswordChange ?? null,
+        requeridoPorReferido: fieldDef.requeridoPorReferido ?? false,
     }),
 })
 
@@ -91,10 +94,13 @@ const materia = defineRecord(myTypes, {
     materia: {type: 'text', label: 'Materia', nullable: false, isName: true},
 });
 
-// abierta ⇔ fecha_cierre es null: no se guarda aparte para que no puedan contradecirse
+/* Un administrador la acepta (crea la materia y se la agrega a quienes la pidieron) o la rechaza.
+   Se cierra sola como retirada cuando se retira el último solicitante activo.
+   abierta ⇔ sin fecha_cierre: redundancia lineal, la controla cierreSegunEstado. */
 const solicitud = defineRecord(myTypes, {
     id: {type: 'text', nullable: false, writable: false as const, visible: false as const, onCreate: 'uuid' as const},
     materia: {type: 'text', label: 'Materia solicitada', nullable: false, isName: true},
+    estado: {type: 'estadoSolicitud', label: 'Estado', nullable: false},
     creada: {type: 'instante', label: 'Creada', nullable: false, writable: false as const, onCreate: 'now' as const},
     fecha_cierre: {type: 'instante', label: 'Fecha de cierre', description: 'vacía mientras la solicitud está abierta'},
 });
@@ -121,9 +127,9 @@ const solicitudes = defineEntity(ctx1, {
     name: 'solicitudes',
     record: 'solicitud',
     pk: ['id'],
-    // una sola solicitud por materia: los demás docentes se suman como solicitantes
-    uks: {materia_unica: ['materia']},
-    validators: ['cierrePosterior'],
+    /* Sin uk sobre materia, para conservar las rechazadas: que haya a lo sumo una abierta por
+       materia (los demás docentes se suman como solicitantes) es una regla entre filas, de la app. */
+    validators: ['cierrePosterior', 'cierreSegunEstado'],
 });
 
 /* NIVEL 2: los subtipos de usuario */
@@ -162,10 +168,16 @@ const docentes = defineEntity(ctx2, {
 
 /* NIVEL 3: relaciones entre subtipos y catálogos */
 
-// simétrica: cada par se guarda una sola vez, ordenado (ver amistadOrdenada)
+/* Simétrica: cada par se guarda una sola vez, ordenado (ver amistadOrdenada), sin importar quién
+   la envió. Empieza como solicitud: el destinatario es el otro integrante, y solo él la acepta,
+   la rechaza o la bloquea. Bloqueada, no se puede volver a enviar. */
 const amistad = defineRecord(myTypes, {
     alumno_a: {...extractPk(alumnos).id, label: 'Alumno'},
     alumno_b: {...extractPk(alumnos).id, label: 'Amigo'},
+    // sin fk propia: enviadaPorIntegrante exige que sea uno del par, y esos ya tienen la suya
+    enviada_por: {...extractPk(alumnos).id, label: 'Enviada por'},
+    estado: {type: 'estadoAmistad', label: 'Estado', nullable: false},
+    creada: {type: 'instante', label: 'Creada', nullable: false, writable: false as const, onCreate: 'now' as const},
 });
 
 // DocenteDictaMateria: el docente sabe/ofrece la materia
@@ -174,9 +186,13 @@ const dictado = defineRecord(myTypes, {
     ...extractPk(materias),
 });
 
+/* Retirarse no borra la fila: así queda el historial y la solicitud sigue teniendo quien la pidió.
+   Mientras esté abierta, un retirado puede volver a activo. */
 const solicitante = defineRecord(myTypes, {
-    solicitud: {...extractPk(solicitudes).id, ...comoReferencia, label: 'Solicitud'},
+    // no hay solicitud sin quien la pida
+    solicitud: {...extractPk(solicitudes).id, ...comoReferencia, label: 'Solicitud', requeridoPorReferido: true},
     docente: {...extractPk(docentes).id, label: 'Docente'},
+    estado: {type: 'estadoSolicitante', label: 'Estado', nullable: false},
 });
 
 const ctx3 = withRecords(ctx2, {amistad, dictado, solicitante})
@@ -189,7 +205,7 @@ const amistades = defineEntity(ctx3, {
         alumno_a: {entity: 'alumnos', fields: {alumno_a: 'id'}},
         alumno_b: {entity: 'alumnos', fields: {alumno_b: 'id'}},
     },
-    validators: ['amistadOrdenada'],
+    validators: ['amistadOrdenada', 'enviadaPorIntegrante'],
 });
 
 const dictados = defineEntity(ctx3, {
@@ -213,8 +229,7 @@ const solicitantes = defineEntity(ctx3, {
 });
 
 /* NIVEL 4: la clase se da sobre una materia que el docente ofrece.
-   El horario es un patrón semanal: los días están en clase_dias y las ocurrencias se derivan
-   (cada día elegido de cada una de las `repeticiones` semanas desde fecha_inicio). */
+   Cuándo se reúne lo dicen sus reglas horarias; las ocurrencias se derivan de ellas. */
 
 const clase = defineRecord(myTypes, {
     id: {type: 'text', nullable: false, writable: false as const, visible: false as const, onCreate: 'uuid' as const},
@@ -222,11 +237,8 @@ const clase = defineRecord(myTypes, {
     presencial: {type: 'boolean', label: 'Presencial', nullable: false},
     ubicacion: {type: 'text', label: 'Ubicación', nullable: false, isName: true,
         description: 'dirección si es presencial, URL si es virtual'},
+    // lo maneja el docente: acepta, rechaza o cancela. Una clase confirmada es una aceptada
     estado: {type: 'estadoClase', label: 'Estado', nullable: false},
-    fecha_inicio: {type: 'fecha', label: 'Fecha de inicio', nullable: false},
-    hora_inicio: {type: 'hora', label: 'Hora de inicio', nullable: false},
-    hora_fin: {type: 'hora', label: 'Hora de fin', nullable: false},
-    repeticiones: {type: 'posInteger', label: 'Semanas', nullable: false},
 });
 
 const ctx4 = withRecords(ctx3, {clase})
@@ -236,28 +248,43 @@ const clases = defineEntity(ctx4, {
     record: 'clase',
     pk: ['id'],
     fks: {dictado: {entity: 'dictados', fields: dictados.pk}},
-    validators: ['ubicacionSegunModalidad', 'horaFinPosterior'],
+    validators: ['ubicacionSegunModalidad'],
 });
 
-/* NIVEL 5 */
+/* NIVEL 5: una clase no existe sin cuándo ni sin quién */
 
-const clase_dia = defineRecord(myTypes, {
-    clase: {...extractPk(clases).id, ...comoReferencia, label: 'Clase'},
-    dia: {type: 'diaSemana', label: 'Día', nullable: false},
+/* fecha_inicio es el primer día en que se da, y su día de la semana es el de la regla: no se guarda
+   aparte para que no puedan contradecirse. Desde ahí se repite cada `intervalo` semanas,
+   `repeticiones` veces: con 4 repeticiones e intervalo 2 abarca 8 semanas. Sin repeticiones
+   sigue indefinidamente. */
+const regla_horaria = defineRecord(myTypes, {
+    clase: {...extractPk(clases).id, ...comoReferencia, label: 'Clase', requeridoPorReferido: true},
+    fecha_inicio: {type: 'fecha', label: 'Fecha de inicio', nullable: false},
+    hora_inicio: {type: 'hora', label: 'Hora de inicio', nullable: false},
+    hora_fin: {type: 'hora', label: 'Hora de fin', nullable: false},
+    intervalo: {type: 'posInteger', label: 'Cada cuántas semanas', nullable: false,
+        description: '1 todas las semanas, 2 semana por medio…'},
+    repeticiones: {type: 'posInteger', label: 'Repeticiones', description: 'vacío: sin fin'},
 });
 
+/* Quienes piden la clase entran aceptados: el pedido es la clase misma. Quien se suma después
+   entra pendiente, y el docente lo acepta o lo rechaza. La baja la da el alumno; la fila queda,
+   así que sigue contando para el mínimo de participantes. */
 const participante = defineRecord(myTypes, {
-    clase: {...extractPk(clases).id, ...comoReferencia, label: 'Clase'},
+    clase: {...extractPk(clases).id, ...comoReferencia, label: 'Clase', requeridoPorReferido: true},
     alumno: {...extractPk(alumnos).id, label: 'Alumno'},
+    estado: {type: 'estadoParticipante', label: 'Estado', nullable: false},
 });
 
-const ctx5 = withRecords(ctx4, {clase_dia, participante})
+const ctx5 = withRecords(ctx4, {regla_horaria, participante})
 
-const clase_dias = defineEntity(ctx5, {
-    name: 'clase_dias',
-    record: 'clase_dia',
-    pk: ['clase', 'dia'],
+const reglas_horarias = defineEntity(ctx5, {
+    name: 'reglas_horarias',
+    record: 'regla_horaria',
+    // con fecha_inicio en la pk, dos grupos pueden alternar semanas en el mismo horario
+    pk: ['clase', 'fecha_inicio', 'hora_inicio'],
     fks: {clase: {entity: 'clases', fields: {clase: 'id'}}},
+    validators: ['horaFinPosterior'],
 });
 
 const participantes = defineEntity(ctx5, {
@@ -270,13 +297,41 @@ const participantes = defineEntity(ctx5, {
     },
 });
 
+/* NIVEL 6: una repetición puntual que no se da. La cancela el docente o un alumno de la clase,
+   con motivo; borrar la fila la descancela. Cancelar la clase entera es su estado. */
+
+const reglaCancelada = extractPk(reglas_horarias);
+const cancelacion = defineRecord(myTypes, {
+    // la clase de la regla es requeridoPorReferido para las reglas, no para las cancelaciones
+    clase: {...reglaCancelada.clase, requeridoPorReferido: false},
+    fecha_inicio: reglaCancelada.fecha_inicio,
+    hora_inicio: reglaCancelada.hora_inicio,
+    fecha: {type: 'fecha', label: 'Fecha cancelada', nullable: false},
+    motivo: {type: 'text', label: 'Motivo', nullable: false, maxLength: 200},
+    cancelada_por: {...extractPk(usuarios).id, ...comoReferencia, label: 'Cancelada por'},
+    creada: {type: 'instante', label: 'Creada', nullable: false, writable: false as const, onCreate: 'now' as const},
+});
+
+const ctx6 = withRecords(ctx5, {cancelacion})
+
+const cancelaciones = defineEntity(ctx6, {
+    name: 'cancelaciones',
+    record: 'cancelacion',
+    pk: ['clase', 'fecha_inicio', 'hora_inicio', 'fecha'],
+    fks: {
+        regla: {entity: 'reglas_horarias', fields: reglas_horarias.pk},
+        cancelada_por: {entity: 'usuarios', fields: {cancelada_por: 'id'}},
+    },
+    validators: ['fechaEsOcurrencia'],
+});
+
 // la última etapa es el sistema entero
-export const myContext = ctx5
-export const myRecords = ctx5
+export const myContext = ctx6
+export const myRecords = ctx6
 
 export const myEntities = defineEntities({
     usuarios, materias, solicitudes, alumnos, docentes,
-    amistades, dictados, solicitantes, clases, clase_dias, participantes,
+    amistades, dictados, solicitantes, clases, reglas_horarias, participantes, cancelaciones,
 })
 
 // Presentation is app-owned metadata; browsers receive it through the API.
@@ -284,7 +339,8 @@ export const entityLabels = {
     usuarios: 'Usuarios', materias: 'Materias', solicitudes: 'Solicitudes de materia',
     alumnos: 'Alumnos', docentes: 'Docentes', amistades: 'Amistades',
     dictados: 'Materias que ofrece cada docente', solicitantes: 'Solicitantes',
-    clases: 'Clases', clase_dias: 'Días de cada clase', participantes: 'Participantes',
+    clases: 'Clases', reglas_horarias: 'Reglas horarias', participantes: 'Participantes',
+    cancelaciones: 'Repeticiones canceladas',
 } satisfies Record<keyof typeof myEntities, string>;
 
 const snapshot = captureSystemSnapshot(myContext, {
@@ -302,8 +358,11 @@ export const sqlMapping = {
     boolean: sqlTypes.boolean,
     rol: sqlTypes.text,
     nivelAcademico: sqlTypes.text,
-    diaSemana: sqlTypes.text,
     estadoClase: sqlTypes.text,
+    estadoSolicitud: sqlTypes.text,
+    estadoAmistad: sqlTypes.text,
+    estadoSolicitante: sqlTypes.text,
+    estadoParticipante: sqlTypes.text,
     fecha: sqlTypes.date,
     hora: sqlTypes.time,
     instante: sqlTypes.timestampWithTimeZone,

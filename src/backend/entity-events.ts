@@ -13,7 +13,7 @@ export function registerEntityEvents(app: Express, auth: Authentication) {
             if (name === authenticationEntity) client.end();
         }
     };
-    app.get('/api/events', auth.requireUser, (_req: Request, res: Response) => {
+    app.get('/api/events', auth.requireUser, auth.requireRol('administrador'), (_req: Request, res: Response) => {
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-store');
         res.setHeader('X-Accel-Buffering', 'no');

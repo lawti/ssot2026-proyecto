@@ -34,9 +34,32 @@ export const horaFinPosterior = (fila: {hora_inicio: string | null, hora_fin: st
     fila.hora_inicio === null || fila.hora_fin === null || fila.hora_fin > fila.hora_inicio
         ? [] : [problem('hora_fin', 'hora.finPosteriorAlInicio', 'regular')];
 
-// Los instantes son ISO en UTC con ancho fijo, así que también se comparan como texto.
-export const cierrePosterior = (fila: {creada: string | null, fecha_cierre: string | null}): readonly Problem[] =>
-    fila.creada === null || fila.fecha_cierre === null || fila.fecha_cierre >= fila.creada
+/* Los instantes son ISO en UTC con ancho fijo, así que también se comparan como texto.
+   `creada` la genera el servidor y no es escribible: en una fila que llega por la API no viene,
+   y entonces no hay contra qué comparar (`== null` cubre el ausente y el null). */
+export const cierrePosterior = (fila: {creada?: string | null, fecha_cierre: string | null}): readonly Problem[] =>
+    fila.creada == null || fila.fecha_cierre === null || fila.fecha_cierre >= fila.creada
         ? [] : [problem('fecha_cierre', 'solicitud.cierreAnteriorACreacion', 'regular')];
 
-export const validadores = {rolAlumno, rolDocente, amistadOrdenada, ubicacionSegunModalidad, horaFinPosterior, cierrePosterior};
+// abierta ⇔ sin fecha de cierre
+export const cierreSegunEstado = (fila: {estado: 'abierta' | 'aceptada' | 'rechazada' | 'retirada' | null, fecha_cierre: string | null}): readonly Problem[] =>
+    fila.estado === null || (fila.estado === 'abierta') === (fila.fecha_cierre === null)
+        ? [] : [problem('fecha_cierre', 'solicitud.cierreSegunEstado', 'regular')];
+
+// quien envió la solicitud de amistad es uno de los dos integrantes del par
+export const enviadaPorIntegrante = (fila: {alumno_a: string | null, alumno_b: string | null, enviada_por: string | null}): readonly Problem[] =>
+    fila.enviada_por === null || fila.enviada_por === fila.alumno_a || fila.enviada_por === fila.alumno_b
+        ? [] : [problem('enviada_por', 'amistad.enviadaPorIntegrante', 'regular')];
+
+/* Una cancelación nombra una ocurrencia de su regla: cae el mismo día de la semana que fecha_inicio
+   (un múltiplo de 7 días después). Que respete el intervalo y las repeticiones depende de la fila
+   de la regla, así que lo controla la app. */
+const DIA_MS = 24 * 60 * 60 * 1000;
+export const fechaEsOcurrencia = (fila: {fecha_inicio: string | null, fecha: string | null}): readonly Problem[] => {
+    if (fila.fecha_inicio === null || fila.fecha === null) return [];
+    const dias = (Date.parse(`${fila.fecha}T00:00:00Z`) - Date.parse(`${fila.fecha_inicio}T00:00:00Z`)) / DIA_MS;
+    return dias >= 0 && dias % 7 === 0 ? [] : [problem('fecha', 'cancelacion.noEsOcurrencia', 'regular')];
+};
+
+export const validadores = {rolAlumno, rolDocente, amistadOrdenada, enviadaPorIntegrante, ubicacionSegunModalidad,
+    horaFinPosterior, cierrePosterior, cierreSegunEstado, fechaEsOcurrencia};

@@ -2,8 +2,11 @@ import {boxType, commonTypeBehaviours, commonTypeDefs, notParsed, parsed, type T
 
 const rolValues = ['alumno', 'docente', 'administrador'] as const;
 const nivelAcademicoValues = ['inicial', 'primario', 'secundario', 'terciario', 'universitario', 'posgrado', 'otro'] as const;
-const diaSemanaValues = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'] as const;
 const estadoClaseValues = ['pendiente', 'aceptada', 'rechazada', 'cancelada'] as const;
+const estadoSolicitudValues = ['abierta', 'aceptada', 'rechazada', 'retirada'] as const;
+const estadoSolicitanteValues = ['activo', 'retirado'] as const;
+const estadoAmistadValues = ['pendiente', 'aceptada', 'rechazada', 'bloqueada'] as const;
+const estadoParticipanteValues = ['pendiente', 'aceptado', 'rechazado', 'baja'] as const;
 
 /* Disponibilidad: un carácter '0'/'1' por media hora de la semana, de lunes 00:00 a domingo 23:30.
    El bit i corresponde a dia*48 + hora*2 + (minutos >= 30 ? 1 : 0), con lunes = 0.
@@ -16,8 +19,11 @@ export const appTypeDefs = {
     posInteger: {...commonTypeDefs.integer, minimum: 1},
     rol: {tsType: boxType<typeof rolValues[number]>(), values: rolValues},
     nivelAcademico: {tsType: boxType<typeof nivelAcademicoValues[number]>(), values: nivelAcademicoValues},
-    diaSemana: {tsType: boxType<typeof diaSemanaValues[number]>(), values: diaSemanaValues},
     estadoClase: {tsType: boxType<typeof estadoClaseValues[number]>(), values: estadoClaseValues},
+    estadoSolicitud: {tsType: boxType<typeof estadoSolicitudValues[number]>(), values: estadoSolicitudValues},
+    estadoAmistad: {tsType: boxType<typeof estadoAmistadValues[number]>(), values: estadoAmistadValues},
+    estadoSolicitante: {tsType: boxType<typeof estadoSolicitanteValues[number]>(), values: estadoSolicitanteValues},
+    estadoParticipante: {tsType: boxType<typeof estadoParticipanteValues[number]>(), values: estadoParticipanteValues},
     /** Fecha de calendario, serializada como YYYY-MM-DD. */
     fecha: {tsType: boxType<string>()},
     /** Hora del día HH:MM en múltiplos de media hora, alineada con la disponibilidad. */
@@ -84,8 +90,11 @@ export const appTypeBehaviours = {
     posInteger: posIntegerBehaviour,
     rol: enumBehaviour(appTypeDefs.rol.values, 'rol'),
     nivelAcademico: enumBehaviour(appTypeDefs.nivelAcademico.values, 'nivelAcademico'),
-    diaSemana: enumBehaviour(appTypeDefs.diaSemana.values, 'diaSemana'),
     estadoClase: enumBehaviour(appTypeDefs.estadoClase.values, 'estadoClase'),
+    estadoSolicitud: enumBehaviour(appTypeDefs.estadoSolicitud.values, 'estadoSolicitud'),
+    estadoAmistad: enumBehaviour(appTypeDefs.estadoAmistad.values, 'estadoAmistad'),
+    estadoSolicitante: enumBehaviour(appTypeDefs.estadoSolicitante.values, 'estadoSolicitante'),
+    estadoParticipante: enumBehaviour(appTypeDefs.estadoParticipante.values, 'estadoParticipante'),
     fecha: shapedTextBehaviour('fecha', fechaValida),
     hora: shapedTextBehaviour('hora', horaValida),
     instante: shapedTextBehaviour('instante', instanteValido),
@@ -107,8 +116,11 @@ export const inputConstraints = {
     posInteger: {minLength: null, maxLength: null, minimum: appTypeDefs.posInteger.minimum},
     rol: {minLength: null, maxLength: null, options: appTypeDefs.rol.values},
     nivelAcademico: {minLength: null, maxLength: null, options: appTypeDefs.nivelAcademico.values},
-    diaSemana: {minLength: null, maxLength: null, options: appTypeDefs.diaSemana.values},
     estadoClase: {minLength: null, maxLength: null, options: appTypeDefs.estadoClase.values},
+    estadoSolicitud: {minLength: null, maxLength: null, options: appTypeDefs.estadoSolicitud.values},
+    estadoAmistad: {minLength: null, maxLength: null, options: appTypeDefs.estadoAmistad.values},
+    estadoSolicitante: {minLength: null, maxLength: null, options: appTypeDefs.estadoSolicitante.values},
+    estadoParticipante: {minLength: null, maxLength: null, options: appTypeDefs.estadoParticipante.values},
     fecha: {minLength: 10, maxLength: 10},
     hora: {minLength: 5, maxLength: 5},
     instante: {minLength: null, maxLength: null},
