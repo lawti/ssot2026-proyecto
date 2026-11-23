@@ -543,7 +543,8 @@ async function show(name: EntityName): Promise<void> {
     content.replaceChildren(controls, scroll);
 }
 
-initializeAuthentication(active => {
+initializeAuthentication(user => {
+    const active = user !== undefined;
     workspace.hidden = !active;
     if (!active) {
         stopWatching();
@@ -555,6 +556,12 @@ initializeAuthentication(active => {
         currentEntity = null;
         content.replaceChildren();
         navigation.catalog([]);
+        return;
+    }
+    if (user.rol !== 'administrador') {
+        workspace.disabled = false;
+        navigation.catalog([]);
+        content.textContent = user.rol === 'docente' ? 'Front del docente' : 'Front del alumno';
         return;
     }
     void run(async () => {

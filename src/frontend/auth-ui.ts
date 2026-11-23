@@ -2,7 +2,7 @@ import {changePassword, clearSession, generateRecoveryCodes, isAuthenticated, lo
 import type {AuthenticatedUser} from '../backend/browser-contract.js';
 import {confirmAction} from './confirm.js';
 
-export function initializeAuthentication(onSession: (active: boolean) => void): void {
+export function initializeAuthentication(onSession: (user: AuthenticatedUser | undefined) => void): void {
     const panel = document.querySelector<HTMLElement>('#authentication')!;
     const identityForm = document.querySelector<HTMLFormElement>('#identity-form')!;
     const username = document.querySelector<HTMLInputElement>('#login-user')!;
@@ -39,7 +39,7 @@ export function initializeAuthentication(onSession: (active: boolean) => void): 
         identityForm.reset();
         loginForm.reset();
         recoveryForm.reset();
-        onSession(false);
+        onSession(undefined);
         showStep('identity');
     }
 
@@ -49,7 +49,7 @@ export function initializeAuthentication(onSession: (active: boolean) => void): 
         session.hidden = false;
         document.querySelector('#session-user')!.textContent = user.usuario;
         account.close();
-        onSession(true);
+        onSession(user);
     }
 
     async function action(form: HTMLFormElement, work: () => Promise<void>): Promise<void> {

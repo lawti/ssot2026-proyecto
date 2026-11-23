@@ -25,7 +25,8 @@ export function registerEntityApi(app: Express, pool: Pick<Pool, 'query' | 'conn
     const router = express.Router();
     const entities = new Map<EntityName, EntityInfo<typeof myContext>>(Object.values(myEntities)
         .map(definition => [definition.name, completeEntity(myContext, definition)]));
-    router.use(auth.requireUser);
+    // la planilla es la herramienta de administración; alumnos y docentes usan sus propias pantallas
+    router.use(auth.requireUser, auth.requireRol('administrador'));
     router.use(express.json({limit: '64kb'}));
     router.get('/', (_req, res) => {
         res.json(Object.values(myEntities).map(({name}) => ({name, label: entityLabels[name]})) satisfies EntityNamesResponse);

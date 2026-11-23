@@ -29,7 +29,7 @@ export async function prepareEntityWrite(entity: EntityInfo<typeof myContext>, b
     const passwordChanged = supplied.some(field => field.transform === 'password');
     for (const field of Object.values(entity.fields)) {
         const generated = operation === 'create' ? field.onCreate : field.onUpdate;
-        if (generated !== null) row[field.name] = generated === 'uuid' ? randomUUID() : '[]';
+        if (generated !== null) row[field.name] = generated === 'uuid' ? randomUUID() : generated === 'now' ? new Date().toISOString() : '[]';
         if (passwordChanged && field.onPasswordChange === 'empty-array') row[field.name] = '[]';
     }
     return row;

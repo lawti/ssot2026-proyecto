@@ -18,17 +18,17 @@ entitySql('missing-table');
 // @ts-expect-error A removed or misspelled field must fail compilation.
 users.select('password_hash');
 // @ts-expect-error Fields from other entities cannot enter a selection.
-users.select('plan');
+users.select('materia');
 // @ts-expect-error WHERE/SET identifiers use the same entity-specific field names.
-users.column('plan');
+users.column('materia');
 // @ts-expect-error SELECT requires at least one column.
 users.select();
 declare const uncheckedName: string;
 // @ts-expect-error An unchecked runtime string cannot become a SQL column.
 users.column(uncheckedName);
 
-const plans = entitySql('planes').select('plan', 'descripcion');
-const planResult = plans.query(db);
-type Plan = Awaited<typeof planResult>['rows'][number];
-export type KeyIsRequired = Assert<Equal<Plan['plan'], number>>;
-export type NullabilityIsPreserved = Assert<Equal<Plan['descripcion'], string | null>>;
+const rules = entitySql('reglas_horarias').select('clase', 'repeticiones');
+const ruleResult = rules.query(db);
+type Rule = Awaited<typeof ruleResult>['rows'][number];
+export type KeyIsRequired = Assert<Equal<Rule['clase'], string>>;
+export type NullabilityIsPreserved = Assert<Equal<Rule['repeticiones'], number | null>>;

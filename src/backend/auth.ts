@@ -10,11 +10,11 @@ import type {AuthenticatedUser, LoginResponse, RecoveryCodesResponse, StoredRow}
 
 const users = entitySql(authenticationEntity);
 const column = users.column;
-const session = users.select('id', 'usuario', 'version_sesion');
+const session = users.select('id', 'usuario', 'rol', 'version_sesion');
 const credentials = users.select(...session.fields, 'contrasena_hash');
 const passwordHash = users.select('contrasena_hash');
 type UserSession = Pick<StoredRow<typeof authenticationEntity>, typeof session.fields[number]>;
-const publicUser = ({id, usuario}: AuthenticatedUser): AuthenticatedUser => ({id, usuario});
+const publicUser = ({id, usuario, rol}: UserSession): AuthenticatedUser => ({id, usuario, rol});
 export function principal(res: Response): AuthenticatedUser {
     const user = res.locals['user'] as AuthenticatedUser | undefined;
     if (!user) throw new ApiFailure(401, 'Iniciá sesión para continuar.');
@@ -50,10 +50,16 @@ export function createAuthentication(pool: Pick<Pool, 'query'>, secret = process
         const user = rows[0];
         if (!user || user.version_sesion !== identity.version) throw new ApiFailure(401, 'La sesión venció o no es válida.');
         res.locals['user'] = publicUser(user);
+        res.locals['rol'] = user.rol;
         res.setHeader('Cache-Control', 'no-store');
         next();
     };
-    return {issueToken, requireUser};
+    // Va después de requireUser, que deja en res.locals el rol leído de la base en cada pedido.
+    const requireRol = (...roles: readonly UserSession['rol'][]): RequestHandler => (_req, res, next) => {
+        if (!roles.includes(res.locals['rol'] as UserSession['rol'])) throw new ApiFailure(403, 'Esta sección es solo para administradores.');
+        next();
+    };
+    return {issueToken, requireUser, requireRol};
 }
 export type Authentication = ReturnType<typeof createAuthentication>;
 
