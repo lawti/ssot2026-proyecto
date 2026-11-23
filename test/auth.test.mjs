@@ -10,7 +10,7 @@ import {entityResult} from './helpers/entity-result.mjs';
 
 const secret = 'test-only-signing-key-with-at-least-32-bytes';
 const password = 'test-password-with-enough-length';
-const user = {id: 'admin-id', usuario: 'admin', version_sesion: 'version-1'};
+const user = {id: 'admin-id', usuario: 'admin', rol: 'administrador', version_sesion: 'version-1'};
 const passwordHash = await hashPassword(password);
 
 async function start(t, query = async sql => sql.startsWith('WITH stats') ? entityResult([user]) : {rows: [user], rowCount: 1}, connect) {
@@ -100,7 +100,7 @@ test('JWT verification rejects tampering, wrong keys, algorithms, audience, issu
     for (const jwt of invalid) assert.equal((await request('/api/entities', 'GET', undefined, jwt)).status, 401);
 });
 
-test('login is public, normalizes usernames, returns a JWT and safe identity, and disables caching', async t => {
+test('login is public, normalizes usernames, returns a JWT and safe identity with role, and disables caching', async t => {
     const queries = [];
     const {request} = await start(t, async (sql, values) => {
         queries.push({sql, values});
@@ -113,11 +113,13 @@ test('login is public, normalizes usernames, returns a JWT and safe identity, an
     assert.equal(result.expiresIn, 86400);
     const claims = decodeJwt(result.token);
     assert.equal(claims.exp - claims.iat, 86400);
-    assert.deepEqual(result.user, {id: user.id, usuario: user.usuario});
+    assert.deepEqual(result.user, {id: user.id, usuario: user.usuario, rol: user.rol});
     assert.equal(result.token.split('.').length, 3);
     assert.ok(!JSON.stringify(result).includes(passwordHash));
     assert.deepEqual(queries[0].values, ['admin']);
-    assert.equal((await request('/api/auth/me', 'GET', undefined, result.token)).status, 200);
+    const currentUser = await request('/api/auth/me', 'GET', undefined, result.token);
+    assert.equal(currentUser.status, 200);
+    assert.deepEqual(await currentUser.json(), {id: user.id, usuario: user.usuario, rol: user.rol});
 });
 
 test('session age is absolute: accepted near one day and rejected past it even with a later exp', async t => {

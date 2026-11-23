@@ -14,7 +14,7 @@ const session = users.select('id', 'usuario', 'rol', 'version_sesion');
 const credentials = users.select(...session.fields, 'contrasena_hash');
 const passwordHash = users.select('contrasena_hash');
 type UserSession = Pick<StoredRow<typeof authenticationEntity>, typeof session.fields[number]>;
-const publicUser = ({id, usuario}: AuthenticatedUser): AuthenticatedUser => ({id, usuario});
+const publicUser = ({id, usuario, rol}: UserSession): AuthenticatedUser => ({id, usuario, rol});
 export function principal(res: Response): AuthenticatedUser {
     const user = res.locals['user'] as AuthenticatedUser | undefined;
     if (!user) throw new ApiFailure(401, 'Iniciá sesión para continuar.');

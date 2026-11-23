@@ -34,6 +34,6 @@ export type EntityResponse = {
 export type DeleteDependencyBlocker = {entity: EntityName; relationship: string; count: number; keys: EntityKey[]};
 export type DeleteDependencyCheck = {blockers: DeleteDependencyBlocker[]};
 export type ApiError = {error: string; problems?: readonly Problem[]};
-export type AuthenticatedUser = {id: string; usuario: string};
+export type AuthenticatedUser = {id: string; usuario: string; rol: (typeof appTypeDefs.rol)['tsType']};
 export type LoginResponse = {token: string; expiresIn: number; user: AuthenticatedUser};
 export type RecoveryCodesResponse = {codes: string[]};
