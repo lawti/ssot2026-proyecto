@@ -11,9 +11,14 @@ import {entityResult} from './helpers/entity-result.mjs';
 const secret = 'test-only-signing-key-with-at-least-32-bytes';
 const password = 'test-password-with-enough-length';
 const user = {id: 'admin-id', usuario: 'admin', rol: 'administrador', version_sesion: 'version-1'};
+// what the usuarios table holds for that account, readable through the API
+const stored = {id: user.id, usuario: user.usuario, nombre: 'Ada', apellido: 'Lovelace', email: null, telefono: null,
+    fecha_nacimiento: null, rol: user.rol};
+// every public input of a new account except the password
+const nuevo = {usuario: 'nuevo', nombre: 'Pía', apellido: 'Ríos', email: null, telefono: null, fecha_nacimiento: null, rol: 'docente'};
 const passwordHash = await hashPassword(password);
 
-async function start(t, query = async sql => sql.startsWith('WITH stats') ? entityResult([user]) : {rows: [user], rowCount: 1}, connect) {
+async function start(t, query = async sql => sql.startsWith('WITH stats') ? entityResult([{...user, ...stored}]) : {rows: [user], rowCount: 1}, connect) {
     const app = express();
     const pool = {query, connect};
     const auth = createAuthentication(pool, secret);
@@ -63,7 +68,7 @@ test('password inputs use the type behaviour and report validation problems unde
     const queries = [];
     const {request} = await start(t, async sql => { queries.push(sql); return {rows: [user]}; });
     for (const contrasena of ['short', 'x'.repeat(129), 123]) {
-        const response = await request('/api/entities/usuarios', 'POST', {usuario: 'nuevo', contrasena});
+        const response = await request('/api/entities/usuarios', 'POST', {...nuevo, contrasena});
         assert.equal(response.status, 400);
         const body = await response.json();
         assert.ok(body.problems.some(problem => problem.field === 'contrasena' && problem.details.type === 'password'));
@@ -156,14 +161,14 @@ test('revoked and deleted accounts cannot use an otherwise valid JWT', async t =
     }
 });
 
-test('every authenticated account discovers and administers users through ordinary CRUD, including itself', async t => {
+test('administrators discover and administer users through ordinary CRUD, including themselves', async t => {
     const {request} = await start(t);
     const discovery = await request('/api/entities');
     assert.equal(discovery.status, 200);
     assert.ok((await discovery.json()).some(entity => entity.name === 'usuarios'));
     assert.equal((await request('/api/entities/usuarios')).status, 200);
-    assert.equal((await request('/api/entities/usuarios', 'POST', {usuario: 'another', contrasena: password})).status, 204);
-    assert.equal((await request('/api/entities/usuarios', 'PUT', {key: {id: user.id}, row: {usuario: 'renamed'}, version: '1'})).status, 204);
+    assert.equal((await request('/api/entities/usuarios', 'POST', {...nuevo, usuario: 'another', contrasena: password})).status, 204);
+    assert.equal((await request('/api/entities/usuarios', 'PUT', {key: {id: user.id}, row: {...nuevo, usuario: 'renamed'}, version: '1'})).status, 204);
     assert.equal((await request('/api/entities/usuarios', 'DELETE', {id: user.id})).status, 204);
 });
 
@@ -172,25 +177,28 @@ test('column security excludes secrets from SELECT, response metadata and rows, 
     const {request} = await start(t, async sql => {
         if (sql.includes('WHERE "id" = $1')) return {rows: [user]};
         selection = sql;
-        return entityResult([{...user, contrasena_hash: 'private-hash', recuperacion_hashes: 'private-codes'}]);
+        return entityResult([{...user, ...stored, contrasena_hash: 'private-hash', recuperacion_hashes: 'private-codes'}]);
     });
     const response = await request('/api/entities/usuarios');
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.deepEqual(body.rows, [{id: user.id, usuario: user.usuario}]);
-    assert.deepEqual(body.columns.map(c => c.name), ['usuario']);
+    assert.deepEqual(body.rows, [stored]);
+    assert.deepEqual(body.columns.map(c => c.name), ['usuario', 'nombre', 'apellido', 'email', 'telefono', 'fecha_nacimiento', 'rol']);
     assert.deepEqual(body.pk, ['id']);
-    assert.deepEqual(body.inputs.map(c => c.name), ['usuario', 'contrasena']);
-    assert.equal(body.inputs[1].type, 'password');
-    assert.deepEqual(body.inputs[1].constraints, {minLength: 12, maxLength: 128});
-    assert.equal(body.inputs[1].optionalOnUpdate, true);
+    assert.deepEqual(body.inputs.map(c => c.name), ['usuario', 'nombre', 'apellido', 'email', 'telefono', 'fecha_nacimiento', 'rol', 'contrasena']);
+    const contrasena = body.inputs.at(-1);
+    assert.equal(contrasena.type, 'password');
+    assert.deepEqual(contrasena.constraints, {minLength: 12, maxLength: 128});
+    assert.equal(contrasena.optionalOnUpdate, true);
     assert.doesNotMatch(selection, /contrasena|recuperacion|version_sesion|SELECT \*/);
     assert.doesNotMatch(JSON.stringify(body), /private-|contrasena_hash|recuperacion|version_sesion/);
 });
 
 test('column security rejects writes to generated ids, password hashes, recovery hashes and session versions', async t => {
     const {request} = await start(t);
-    const row = {usuario: 'nuevo', contrasena: password};
+    const row = {...nuevo, contrasena: password};
+    // the same row without the attacker field is accepted, so each 400 comes from that field
+    assert.equal((await request('/api/entities/usuarios', 'POST', row)).status, 204);
     for (const field of ['id', 'contrasena_hash', 'recuperacion_hashes', 'version_sesion']) {
         assert.equal((await request('/api/entities/usuarios', 'POST', {...row, [field]: 'attacker-value'})).status, 400);
         assert.equal((await request('/api/entities/usuarios', 'PUT', {key: {id: 'other'}, row: {...row, [field]: 'attacker-value'}, version: '1'})).status, 400);
@@ -203,7 +211,7 @@ test('generic CRUD creates users with server-generated ids, hashed passwords and
         queries.push({sql, values});
         return {rows: [user], rowCount: 1};
     });
-    const response = await request('/api/entities/usuarios', 'POST', {usuario: 'NUEVO', contrasena: password});
+    const response = await request('/api/entities/usuarios', 'POST', {...nuevo, usuario: 'NUEVO', contrasena: password});
     assert.equal(response.status, 204);
     const inserted = queries.find(q => q.sql.startsWith('INSERT'));
     const names = inserted.sql.match(/\(([^)]+)\)/)[1].split(', ').map(name => name.replaceAll('"', ''));
@@ -216,11 +224,12 @@ test('generic CRUD creates users with server-generated ids, hashed passwords and
     assert.ok(!queries.some(q => /FOR UPDATE|BEGIN|COMMIT/.test(q.sql)));
 });
 
-test('account roles and activation states are not part of the API', async t => {
+test('the role is a single SSOT enum: no extra role flags or activation states, no unknown roles', async t => {
     const {request} = await start(t);
+    assert.equal((await request('/api/entities/usuarios', 'POST', {...nuevo, contrasena: password, rol: 'admin'})).status, 400);
     for (const field of ['administrador', 'activo']) {
-        assert.equal((await request('/api/entities/usuarios', 'POST', {usuario: 'admin', contrasena: password, [field]: true})).status, 400);
-        assert.equal((await request('/api/entities/usuarios', 'PUT', {key: {id: user.id}, row: {usuario: 'admin', [field]: true}})).status, 400);
+        assert.equal((await request('/api/entities/usuarios', 'POST', {...nuevo, contrasena: password, [field]: true})).status, 400);
+        assert.equal((await request('/api/entities/usuarios', 'PUT', {key: {id: user.id}, row: {...nuevo, [field]: true}, version: '1'})).status, 400);
     }
 });
 
@@ -230,4 +239,27 @@ test('anonymous authentication operations limit repeated attempts', async t => {
     const response = await request('/api/auth/recover', 'POST', {}, '');
     assert.equal(response.status, 429);
     assert.ok(Number(response.headers.get('retry-after')) > 0);
+});
+
+test('the spreadsheet API is for administrators: alumnos and docentes get 403 before any table is touched', async t => {
+    for (const rol of ['alumno', 'docente']) {
+        const queries = [];
+        const {request} = await start(t, async sql => { queries.push(sql); return {rows: [{...user, rol}], rowCount: 1}; });
+        for (const [path, method, body] of [
+            ['/api/entities', 'GET'], ['/api/entities/usuarios', 'GET'],
+            ['/api/entities/usuarios', 'POST', {...nuevo, contrasena: password}],
+            ['/api/entities/usuarios', 'PUT', {key: {id: user.id}, row: nuevo, version: '1'}],
+            ['/api/entities/usuarios', 'DELETE', {id: user.id}],
+            ['/api/entities/materias/delete-check', 'POST', {keys: [{materia: 'Álgebra'}]}],
+            ['/api/entities/materias/bulk-delete', 'POST', {keys: [{materia: 'Álgebra'}]}],
+        ]) {
+            const response = await request(path, method, body);
+            assert.equal(response.status, 403, `${rol} ${method} ${path}`);
+            assert.deepEqual(await response.json(), {error: 'Esta sección es solo para administradores.'});
+        }
+        // only the session lookup ran; the role is read from the database on every request
+        assert.ok(queries.every(sql => /^SELECT .* FROM "ssot"\."usuarios" WHERE "id" = \$1$/.test(sql)), queries.join('\n'));
+        // their own account operations stay available
+        assert.equal((await request('/api/auth/me')).status, 200);
+    }
 });

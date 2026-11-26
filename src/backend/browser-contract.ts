@@ -37,3 +37,8 @@ export type ApiError = {error: string; problems?: readonly Problem[]};
 export type AuthenticatedUser = {id: string; usuario: string; rol: (typeof appTypeDefs.rol)['tsType']};
 export type LoginResponse = {token: string; expiresIn: number; user: AuthenticatedUser};
 export type RecoveryCodesResponse = {codes: string[]};
+// Alta pública: los campos que pide cada parte del formulario, el pedido y la sesión que abre.
+export type RolRegistrable = 'alumno' | 'docente';
+export type RegistroCampos = {usuario: EntityInputColumn[]} & Record<RolRegistrable, EntityInputColumn[]>;
+export type RegistroRequest = {rol: RolRegistrable; usuario: EntityRow; perfil: EntityRow};
+export type RegistroResponse = LoginResponse & RecoveryCodesResponse;

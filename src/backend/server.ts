@@ -7,6 +7,7 @@ import {createAuthentication, registerAuthApi} from './auth.js';
 import {initializeUsers, reportInitialization} from './bootstrap.js';
 import {registerEntityEvents} from './entity-events.js';
 import {registerLandingApi} from './landing.js';
+import {registerRegistroApi} from './registro.js';
 
 const pool = new Pool(databaseConfig);
 const app = express();
@@ -14,6 +15,7 @@ app.use(express.json());
 const auth = createAuthentication(pool);
 const publish = registerEntityEvents(app, auth);
 registerAuthApi(app, pool, auth);
+registerRegistroApi(app, pool, auth);
 registerEntityApi(app, pool, auth, publish);
 registerLandingApi(app);
 

@@ -10,7 +10,7 @@ import type {EntityName} from './api-contract.js';
 import type {ApiError, DeleteDependencyBlocker, DeleteDependencyCheck, EntityForeignKey, EntityNamesResponse, EntityResponse} from './api-contract.js';
 import {ApiFailure, apiErrorHandler, explainKeyChangeFailure, readObject} from './api-errors.js';
 import type {Authentication} from './auth.js';
-import {allowedFields} from './column-security.js';
+import {allowedFields, entityInputs} from './column-security.js';
 import {entityTable, insertPreparedRow, prepareEntityWrite} from './entity-write.js';
 
 function readRow(fields: EntityInfo<typeof myContext>['fields'], value: unknown): Record<string, unknown> {
@@ -46,9 +46,7 @@ export function registerEntityApi(app: Express, pool: Pick<Pool, 'query' | 'conn
         }
         const columns = Object.values(readable).filter(field => field.visible)
             .map(({name, label, type, nullable, writable}) => ({name, label, type, nullable, writable, constraints: inputConstraints[type]}));
-        const inputs = Object.values(writable).map(({inputName: name, inputType: type, inputConstraints: constraints, label, nullable, transform}) => ({
-            name, label, type, nullable, constraints, optionalOnUpdate: transform === 'password',
-        }));
+        const inputs = entityInputs(entity);
         const foreignKeys = Object.entries(entity.fks).flatMap(([name, fk]) => {
             const target = entities.get(fk.entity as EntityName)!;
             const targetReadable = allowedFields(target, 'read');
