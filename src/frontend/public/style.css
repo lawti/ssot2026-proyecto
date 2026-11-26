@@ -75,6 +75,7 @@ h3 { font-size: 1.1rem; margin: 0 0 12px; color: var(--text); }
 #authentication h1 { font-size: 1.5rem; margin: 0 0 24px; }
 #authentication .actions { flex-wrap: wrap; }
 #login-identity { overflow-wrap: anywhere; }
+.registro-roles { display: flex; gap: 16px; margin-top: 4px; }
 fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 input, select, button { font: inherit; border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; background: var(--surface); color: inherit; }
 button { cursor: pointer; font-weight: 600; }

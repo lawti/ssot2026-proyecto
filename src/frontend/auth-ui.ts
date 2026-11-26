@@ -1,6 +1,7 @@
-import {changePassword, clearSession, generateRecoveryCodes, isAuthenticated, login, logout, recover, restoreSession} from './api.js';
-import type {AuthenticatedUser} from '../backend/browser-contract.js';
+import {ApiRequestError, changePassword, clearSession, generateRecoveryCodes, isAuthenticated, login, logout, recover, register, registroCampos, restoreSession} from './api.js';
+import type {AuthenticatedUser, RegistroCampos} from '../backend/browser-contract.js';
 import {confirmAction} from './confirm.js';
+import {createRegistroForm, type RegistroForm} from './registro-form.js';
 
 export function initializeAuthentication(onSession: (user: AuthenticatedUser | undefined) => void): void {
     const panel = document.querySelector<HTMLElement>('#authentication')!;
@@ -19,15 +20,22 @@ export function initializeAuthentication(onSession: (user: AuthenticatedUser | u
     const accountTitle = document.querySelector<HTMLElement>('#account-dialog-title');
     const closeAccountDialog = document.querySelector<HTMLButtonElement>('#close-account-dialog');
 
-    function showStep(step: 'identity' | 'password' | 'recovery'): void {
+    const registroForm = document.querySelector<HTMLFormElement>('#registro-form')!;
+    let campos: RegistroCampos | undefined;
+    let registro: RegistroForm | undefined;
+
+    function showStep(step: 'identity' | 'password' | 'recovery' | 'registro'): void {
         identityForm.hidden = step !== 'identity';
         loginForm.hidden = step !== 'password';
         recoveryForm.hidden = step !== 'recovery';
+        registroForm.hidden = step !== 'registro';
         password.value = '';
         error.textContent = '';
-        document.querySelector('#authentication-title')!.textContent = step === 'recovery' ? 'Recuperar contraseña' : 'Iniciar sesión';
-        const focus = step === 'identity' ? username : step === 'password' ? password : document.querySelector<HTMLInputElement>('#recover-user')!;
-        focus.focus();
+        document.querySelector('#authentication-title')!.textContent =
+            step === 'recovery' ? 'Recuperar contraseña' : step === 'registro' ? 'Crear cuenta' : 'Iniciar sesión';
+        const focus = step === 'identity' ? username : step === 'password' ? password : step === 'recovery'
+            ? document.querySelector<HTMLInputElement>('#recover-user')! : registroForm.querySelector<HTMLInputElement>('input');
+        focus?.focus();
     }
 
     function signedOut(): void {
@@ -53,7 +61,9 @@ export function initializeAuthentication(onSession: (user: AuthenticatedUser | u
     }
 
     async function action(form: HTMLFormElement, work: () => Promise<void>): Promise<void> {
-        const inputs = [...form.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')];
+        // solo se reactiva lo que estaba activo: un campo marcado "Ninguna" sigue deshabilitado
+        const inputs = [...form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>('input, select, button')]
+            .filter(input => !input.disabled);
         inputs.forEach(input => { input.disabled = true; });
         error.textContent = '';
         try { await work(); }
@@ -106,6 +116,32 @@ export function initializeAuthentication(onSession: (user: AuthenticatedUser | u
         void action(loginForm, async () => {
             const result = await login(String(data.get('usuario')), String(data.get('contrasena')));
             signedIn(result.user);
+        });
+    };
+
+    document.querySelector<HTMLButtonElement>('#show-registro')!.onclick = () => {
+        void action(identityForm, async () => {
+            // los campos se piden una vez (salen del SSOT); el formulario se arma de nuevo en cada visita
+            campos ??= await registroCampos();
+            registro = createRegistroForm(campos, registroForm);
+            showStep('registro');
+        });
+    };
+    document.querySelector<HTMLButtonElement>('#registro-volver')!.onclick = () => showStep('identity');
+
+    registroForm.onsubmit = event => {
+        event.preventDefault();
+        const form = registro!;
+        void action(registroForm, async () => {
+            form.problems([]);
+            try {
+                const result = await register(form.read());
+                await savedCodes(result.codes);
+                signedIn(result.user);
+            } catch (failure) {
+                if (failure instanceof ApiRequestError && form.problems(failure.problems)) throw new Error('Revisá los campos marcados.');
+                throw failure;
+            }
         });
     };
 
