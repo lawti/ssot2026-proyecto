@@ -72,9 +72,11 @@ test('the registration form fields come from the SSOT, without what the server a
     const campos = await response.json();
     const names = inputs => inputs.map(input => input.name);
     assert.deepEqual(names(campos.usuario), ['usuario', 'nombre', 'apellido', 'email', 'telefono', 'fecha_nacimiento', 'contrasena']);
-    assert.deepEqual(names(campos.alumno), ['nivel_academico']);
-    assert.deepEqual(names(campos.docente), ['disponibilidad', 'descripcion']);
-    assert.deepEqual(campos.alumno[0].constraints.options, ['inicial', 'primario', 'secundario', 'terciario', 'universitario', 'posgrado', 'otro']);
+    assert.deepEqual(Object.keys(campos.perfiles), ['alumno', 'docente']);
+    assert.deepEqual(names(campos.perfiles.alumno), ['nivel_academico']);
+    assert.deepEqual(names(campos.perfiles.docente), ['disponibilidad', 'descripcion']);
+    assert.deepEqual(campos.eligenMaterias, ['docente']);
+    assert.deepEqual(campos.perfiles.alumno[0].constraints.options, ['inicial', 'primario', 'secundario', 'terciario', 'universitario', 'posgrado', 'otro']);
     assert.equal(campos.usuario.at(-1).type, 'password');
 });
 

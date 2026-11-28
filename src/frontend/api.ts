@@ -1,4 +1,4 @@
-import type {ApiError, AuthenticatedUser, DeleteDependencyCheck, EntityCreate, EntityKey, EntityName, EntityNamesResponse, EntityResponse, EntityUpdate, LoginResponse, RecoveryCodesResponse, RegistroCampos, RegistroRequest, RegistroResponse} from '../backend/browser-contract.js';
+import type {ApiError, AuthenticatedUser, DeleteDependencyCheck, EntityCreate, EntityKey, EntityName, EntityNamesResponse, EntityResponse, EntityUpdate, LoginResponse, RecoveryCodesResponse, RegistroCampos, RegistroMaterias, RegistroRequest, RegistroResponse} from '../backend/browser-contract.js';
 import type {Problem} from 'system-definition';
 import type {EntityName as ChangedEntity, EntityQuery} from '../backend/browser-contract.js';
 import {messageOf} from './messages.js';
@@ -111,6 +111,9 @@ export async function login(usuario: string, contrasena: string): Promise<LoginR
 }
 export async function registroCampos(): Promise<RegistroCampos> {
     return (await request('/api/registro')).json() as Promise<RegistroCampos>;
+}
+export async function registroMaterias(q?: string): Promise<RegistroMaterias> {
+    return (await request(`/api/registro/materias${q ? `?q=${encodeURIComponent(q)}` : ''}`)).json() as Promise<RegistroMaterias>;
 }
 // el alta deja la sesión iniciada, igual que login()
 export async function register(registro: RegistroRequest): Promise<RegistroResponse> {

@@ -82,6 +82,16 @@ h3 { font-size: 1.1rem; margin: 0 0 12px; color: var(--text); }
 .registro-pasos > button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; padding: 6px 10px; color: var(--text-muted); }
 .registro-pasos > button[aria-selected=true] { color: var(--text); border-bottom-color: var(--accent); }
 .registro-pasos > button:hover { background: var(--hover); }
+/* selector de materias del registro */
+.selector-materias > .muted:first-child { margin-top: 0; }
+.selector-materias > input[type=search] { width: 100%; }
+.materias-elegidas { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.materia-chip { display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px 2px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-text); font-size: .85rem; }
+.materia-chip > button { border: 0; background: transparent; color: inherit; padding: 0 6px; line-height: 1.4; }
+.materias-lista { max-height: min(45vh, 360px); overflow-y: auto; margin-top: 8px; border: 1px solid var(--border); border-radius: 4px; }
+.materias-lista > label { display: flex; align-items: center; gap: 6px; padding: 6px 10px; cursor: pointer; }
+.materias-lista > label + label { border-top: 1px solid var(--divider); }
+.materias-lista > label:hover { background: var(--hover); }
 fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 input, select, button { font: inherit; border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; background: var(--surface); color: inherit; }
 button { cursor: pointer; font-weight: 600; }

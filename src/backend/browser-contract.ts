@@ -39,7 +39,8 @@ export type LoginResponse = {token: string; expiresIn: number; user: Authenticat
 export type RecoveryCodesResponse = {codes: string[]};
 // Alta pública: los campos que pide cada parte del formulario, el pedido y la sesión que abre.
 export type RolRegistrable = 'alumno' | 'docente';
-export type RegistroCampos = {usuario: EntityInputColumn[]} & Record<RolRegistrable, EntityInputColumn[]>;
+// los campos del usuario, los del perfil de cada rol, y qué roles eligen además sus materias
+export type RegistroCampos = {usuario: EntityInputColumn[]; perfiles: Record<RolRegistrable, EntityInputColumn[]>; eligenMaterias: RolRegistrable[]};
 // materias: solo el docente, opcional; son nombres del catálogo (GET /api/registro/materias)
 export type RegistroRequest = {rol: RolRegistrable; usuario: EntityRow; perfil: EntityRow; materias?: string[]};
 /* completo: vino el catálogo entero y se filtra en el navegador; si no, son las coincidencias de

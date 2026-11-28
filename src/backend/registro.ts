@@ -71,8 +71,11 @@ export function registerRegistroApi(app: Express, pool: Pick<Pool, 'connect' | '
     router.use(express.json({limit: '8kb'}));
     const campos = {
         usuario: entityInputs(usuarios, fijadosPorElServidor.usuario),
-        alumno: entityInputs(subtipos.alumno, fijadosPorElServidor.perfil),
-        docente: entityInputs(subtipos.docente, fijadosPorElServidor.perfil),
+        perfiles: {
+            alumno: entityInputs(subtipos.alumno, fijadosPorElServidor.perfil),
+            docente: entityInputs(subtipos.docente, fijadosPorElServidor.perfil),
+        },
+        eligenMaterias: Object.keys(ofertas) as RolRegistrable[],
     } satisfies RegistroCampos;
     router.get('/', (_req, res) => { res.json(campos); });
     router.get('/materias', async (req, res) => { res.json(await buscarMaterias(pool, req.query['q'])); });
