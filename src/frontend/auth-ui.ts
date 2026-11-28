@@ -132,6 +132,7 @@ export function initializeAuthentication(onSession: (user: AuthenticatedUser | u
     registroForm.onsubmit = event => {
         event.preventDefault();
         const form = registro!;
+        if (!form.valid()) return;
         void action(registroForm, async () => {
             form.problems([]);
             try {

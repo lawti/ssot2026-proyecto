@@ -76,6 +76,12 @@ h3 { font-size: 1.1rem; margin: 0 0 12px; color: var(--text); }
 #authentication .actions { flex-wrap: wrap; }
 #login-identity { overflow-wrap: anywhere; }
 .registro-roles { display: flex; gap: 16px; margin-top: 4px; }
+/* pasos del registro: pestañas arriba; el paso de horarios ensancha el panel para la grilla */
+#authentication:has(.registro-ancho:not([hidden])) { width: min(100%, 560px); }
+.registro-pasos { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+.registro-pasos > button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; padding: 6px 10px; color: var(--text-muted); }
+.registro-pasos > button[aria-selected=true] { color: var(--text); border-bottom-color: var(--accent); }
+.registro-pasos > button:hover { background: var(--hover); }
 fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 input, select, button { font: inherit; border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; background: var(--surface); color: inherit; }
 button { cursor: pointer; font-weight: 600; }
@@ -183,3 +189,21 @@ thead .pinned-col { z-index: 3; background: var(--surface-alt); }
 .horizontal-overflow .scroll-cue { display: flex; }
 .scroll-cue:disabled { visibility: hidden; }
 .scroll-cue .action-label { display: none; }
+/* Disponibilidad: resumen + botón en el campo, grilla semanal en un diálogo */
+.disponibilidad-campo { display: flex; align-items: center; gap: 8px; margin-top: 4px; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; }
+.table-scroll .disponibilidad-campo { margin: 0; border: 0; padding: 4px 8px; }
+.disponibilidad-resumen { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; }
+.disponibilidad-campo > button { flex: none; padding: 3px 10px; }
+.disponibilidad-dialog { width: min(560px, calc(100% - 16px)); }
+.disponibilidad-editor > .muted { margin-top: 0; }
+.disponibilidad-scroll { max-height: min(60vh, 520px); overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; margin: 8px 0 14px; }
+.disponibilidad-grilla { width: 100%; border-collapse: collapse; table-layout: fixed; user-select: none; touch-action: none; outline: none; }
+.disponibilidad-grilla thead th { position: sticky; top: 0; z-index: 3; cursor: default; background: var(--surface-alt); font-size: .8rem; padding: 4px 0; text-align: center; }
+.disponibilidad-grilla th:first-child { width: 3.5rem; }
+.disponibilidad-grilla tbody th, .disponibilidad-grilla td { height: 14px; padding: 0; border: 0; border-right: 1px solid var(--grid-line); }
+.disponibilidad-grilla tbody th { position: static; background: transparent; cursor: default; font-size: .7rem; font-weight: normal; color: var(--text-muted); text-align: right; padding-right: 6px; vertical-align: top; line-height: 1; }
+.disponibilidad-grilla td { cursor: pointer; scroll-margin-top: 2rem; }
+.disponibilidad-grilla tbody tr:nth-child(odd) > * { border-top: 1px solid var(--grid-line); }
+.disponibilidad-grilla td:hover { background: var(--hover); }
+.disponibilidad-grilla td.marcada { background: var(--accent); }
+.disponibilidad-grilla:focus-visible td.foco, .disponibilidad-grilla:focus td.foco { outline: 2px solid var(--accent-text); outline-offset: -2px; }

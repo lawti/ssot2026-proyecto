@@ -1,9 +1,41 @@
 import type {EntityInputColumn, FieldValue} from '../backend/browser-contract.js';
 import {element} from './dom.js';
+import {editarDisponibilidad, largoDisponibilidad, resumenDisponibilidad} from './disponibilidad.js';
 
 type Column = EntityInputColumn;
 type Value = FieldValue;
-type Editor = {input: HTMLInputElement | HTMLSelectElement; read: () => Value; requiredWhenEnabled?: boolean};
+/* `widget` reemplaza al input en el campo cuando el valor se edita con otro control (el input queda
+   oculto adentro, guardando el valor); `refresh` lo vuelve a dibujar cuando cambia su estado. */
+type Editor = {input: HTMLInputElement | HTMLSelectElement; read: () => Value; requiredWhenEnabled?: boolean;
+    widget?: HTMLElement; refresh?: () => void};
+
+// el resumen de la semana y un botón que abre la grilla
+function disponibilidadEditor(label: string): Editor {
+    const input = element('input');
+    input.type = 'hidden';
+    const resumen = element('span');
+    resumen.className = 'disponibilidad-resumen';
+    const editar = element('button', 'Editar');
+    editar.type = 'button';
+    editar.setAttribute('aria-label', `Editar ${label.toLowerCase()}`);
+    const widget = element('div');
+    widget.className = 'disponibilidad-campo';
+    widget.append(resumen, editar, input);
+    const refresh = () => {
+        resumen.textContent = input.disabled ? 'Ninguna' : resumenDisponibilidad(input.value);
+        resumen.title = resumen.textContent;
+        editar.disabled = input.disabled;
+    };
+    editar.onclick = async () => {
+        const nuevo = await editarDisponibilidad(input.value, label);
+        if (nuevo === undefined || nuevo === input.value) return;
+        input.value = nuevo;
+        refresh();
+        input.dispatchEvent(new Event('change', {bubbles: true}));
+    };
+    // un horario sin tocar es una semana vacía, que también es un valor válido
+    return {input, widget, refresh, read: () => input.value || '0'.repeat(largoDisponibilidad)};
+}
 
 function integerEditor(constraints: Column['constraints']): Editor {
     const input = element('input');
@@ -62,24 +94,18 @@ const editors = {
         input.maxLength = constraints.maxLength ?? 524288;
         return {input, read: () => input.value, requiredWhenEnabled: true};
     },
-    disponibilidad: constraints => {
-        const input = element('input');
-        input.minLength = constraints.minLength ?? 0;
-        input.maxLength = constraints.maxLength ?? 524288;
-        input.pattern = '[01]*';
-        return {input, read: () => input.value, requiredWhenEnabled: true};
-    },
+    disponibilidad: (_constraints, label) => disponibilidadEditor(label),
     boolean: (_constraints) => {
         const input = element('select');
         input.add(new Option('No', 'false'));
         input.add(new Option('Sí', 'true'));
         return {input, read: () => input.value === 'true'};
     },
-} satisfies Record<Column['type'], (constraints: Column['constraints']) => Editor>;
+} satisfies Record<Column['type'], (constraints: Column['constraints'], label: string) => Editor>;
 
 // Shared by row editing and equality filters; null remains distinct from empty text.
 export function createValueField(column: Column, value?: Value, optional = false) {
-    const editor: Editor = editors[column.type](column.constraints);
+    const editor: Editor = editors[column.type](column.constraints, column.label);
     const input = editor.input;
     const select = input instanceof HTMLSelectElement;
     input.id = `field-${crypto.randomUUID()}`;
@@ -94,7 +120,7 @@ export function createValueField(column: Column, value?: Value, optional = false
     label.htmlFor = input.id;
     const field = element('div');
     field.className = 'field';
-    field.append(label, input);
+    field.append(label, editor.widget ?? input);
     const empty = element('input');
     empty.type = 'checkbox';
     empty.checked = column.nullable && !select && value == null;
@@ -103,9 +129,10 @@ export function createValueField(column: Column, value?: Value, optional = false
         nullLabel.className = 'null-option';
         nullLabel.append(empty, document.createTextNode(' Ninguna'));
         field.append(nullLabel);
-        empty.onchange = () => { input.disabled = empty.checked; };
+        empty.onchange = () => { input.disabled = empty.checked; editor.refresh?.(); };
     }
     input.disabled = empty.checked;
+    editor.refresh?.();
     return {field, label: label.textContent!, input, read: (): Value | undefined => {
         if (optional && input.value === '') return undefined;
         return empty.checked || (select && column.nullable && input.value === '') ? null : editor.read();

@@ -37,14 +37,19 @@
                     <button id="show-registro" type="button">Crear cuenta</button>
                 </div>
             </form>
-            <form id="registro-form" hidden>
-                <fieldset class="field">
-                    <legend>Me registro como</legend>
-                    <div id="registro-roles" class="registro-roles"></div>
-                </fieldset>
-                <div id="registro-usuario"></div>
-                <div id="registro-perfil"></div>
+            <form id="registro-form" hidden novalidate>
+                <div id="registro-pasos" class="registro-pasos" role="tablist" aria-label="Pasos del registro" hidden></div>
+                <div id="registro-datos" role="tabpanel">
+                    <fieldset class="field">
+                        <legend>Me registro como</legend>
+                        <div id="registro-roles" class="registro-roles"></div>
+                    </fieldset>
+                    <div id="registro-usuario"></div>
+                    <div id="registro-perfil"></div>
+                </div>
+                <div id="registro-horarios" role="tabpanel" hidden></div>
                 <div class="actions">
+                    <button id="registro-siguiente" type="button" class="primary" hidden>Siguiente</button>
                     <button type="submit" class="primary">Crear cuenta</button>
                     <button id="registro-volver" type="button">Ya tengo cuenta</button>
                 </div>
