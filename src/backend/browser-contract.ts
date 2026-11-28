@@ -40,5 +40,9 @@ export type RecoveryCodesResponse = {codes: string[]};
 // Alta pública: los campos que pide cada parte del formulario, el pedido y la sesión que abre.
 export type RolRegistrable = 'alumno' | 'docente';
 export type RegistroCampos = {usuario: EntityInputColumn[]} & Record<RolRegistrable, EntityInputColumn[]>;
-export type RegistroRequest = {rol: RolRegistrable; usuario: EntityRow; perfil: EntityRow};
+// materias: solo el docente, opcional; son nombres del catálogo (GET /api/registro/materias)
+export type RegistroRequest = {rol: RolRegistrable; usuario: EntityRow; perfil: EntityRow; materias?: string[]};
+/* completo: vino el catálogo entero y se filtra en el navegador; si no, son las coincidencias de
+   la búsqueda `q` (hasta browsing.clientRows) y hay que volver a pedir al cambiarla */
+export type RegistroMaterias = {materias: string[]; completo: boolean};
 export type RegistroResponse = LoginResponse & RecoveryCodesResponse;

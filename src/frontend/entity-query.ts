@@ -1,3 +1,4 @@
+import {textoBuscable} from './texto.js';
 import type {EntityQuery, EntityResponse} from '../backend/browser-contract.js';
 
 // PostgreSQL uses C collation for text: compare Unicode code points, not browser locale.
@@ -12,10 +13,10 @@ function compare(left: unknown, right: unknown): number {
 
 export function entityPage(entity: EntityResponse, query: EntityQuery = {}) {
     if (entity.window.kind === 'page') return {...entity.window, rows: entity.rows, versions: entity.versions};
-    const filter = (query.filter ?? '').trim().toLowerCase();
+    const filter = textoBuscable((query.filter ?? '').trim());
     const rows = entity.rows.map((row, index) => ({row, version: entity.versions[index]!}))
         .filter(({row}) => Object.entries(query.where ?? {}).every(([key, value]) => Reflect.get(row, key) === value) &&
-            (!filter || Object.values(row).some(value => value != null && String(value).toLowerCase().includes(filter))));
+            (!filter || Object.values(row).some(value => value != null && textoBuscable(String(value)).includes(filter))));
     const fields = [...new Set([...(query.sort ? [query.sort] : []), ...entity.pk])];
     rows.sort((a, b) => {
         for (const field of fields) {

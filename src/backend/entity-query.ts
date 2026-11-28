@@ -9,6 +9,13 @@ import {browsing} from './browsing.js';
 import type {EntityQuery, EntityWindow} from './api-contract.js';
 
 type Fields = EntityInfo<typeof myContext>['fields'];
+
+/* Las búsquedas ignoran mayúsculas y acentos ("alg" encuentra "Álgebra"). Sin la extensión
+   unaccent, que quedaría fuera del SSOT: translate con las letras acentuadas del español y vecinas.
+   El navegador hace lo mismo con textoBuscable de frontend/texto.ts, para filtrar igual en los dos. */
+export const conAcento = 'áàâäãåéèêëíìîïóòôöõúùûüñçý';
+export const sinAcento = 'aaaaaaeeeeiiiiooooouuuuncy';
+export const textoBuscable = (sql: string): string => `translate(lower(${sql}), '${conAcento}', '${sinAcento}')`;
 export function readQuery(value: unknown, fields: Fields): EntityQuery {
     const input = readObject(value, [], ['filter', 'sort', 'direction', 'page', 'where']);
     const {filter = '', sort, direction = 'asc', page = 1, where = {}} = input;
@@ -30,7 +37,7 @@ export async function queryEntity(pool: Pick<Pool, 'query'>, name: string, field
     const predicates = Object.entries(query.where ?? {}).map(([field, value]) => `${quote(field)} IS NOT DISTINCT FROM ${parameter(value)}`);
     if (query.filter) {
         const search = parameter(query.filter);
-        predicates.push(`(${names.map(field => `strpos(lower(${quote(field)}::text), lower(${search})) > 0`).join(' OR ')})`);
+        predicates.push(`(${names.map(field => `strpos(${textoBuscable(`${quote(field)}::text`)}, ${textoBuscable(search)}) > 0`).join(' OR ')})`);
     }
     const order = [...new Set([...(query.sort ? [query.sort] : []), ...pk])].map(field => {
         return `${quote(field)}${sqlMapping[fields[field]!.type] === 'text' ? ' COLLATE "C"' : ''} ${field === query.sort ? query.direction ?? 'asc' : 'asc'} NULLS LAST`;

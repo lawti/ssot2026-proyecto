@@ -4,6 +4,7 @@ import express from 'express';
 import {createAuthentication, registerAuthApi} from '../dist/backend/auth.js';
 import {registerRegistroApi} from '../dist/backend/registro.js';
 import {verifyPassword} from '../dist/backend/credentials.js';
+import {textoBuscable} from '../dist/frontend/texto.js';
 
 const secret = 'test-only-signing-key-with-at-least-32-bytes';
 const password = 'una-contrasena-larga';
@@ -12,14 +13,16 @@ const usuario = {usuario: 'Sofia.Lopez', nombre: 'Sofía', apellido: 'López', e
 const alumno = {rol: 'alumno', usuario, perfil: {nivel_academico: 'secundario'}};
 const docente = {rol: 'docente', usuario: {...usuario, usuario: 'pia.rios'}, perfil: {disponibilidad: null, descripcion: null}};
 
-// `fail` lets a test make one INSERT throw, as the database would
-async function start(t, fail) {
+// `fail` lets a test make one INSERT throw, as the database would; it returns the error code
+async function start(t, fail, catalogo = ['Álgebra', 'Física']) {
     const statements = [];
+    const catalogQueries = [];
     const sessions = new Map();
     const client = {
         async query(sql, values) {
             statements.push({sql, values});
-            if (fail && sql.startsWith('INSERT') && fail(sql)) throw Object.assign(new Error('internal detail'), {code: '23505'});
+            const code = fail && sql.startsWith('INSERT') && fail(sql);
+            if (code) throw Object.assign(new Error('internal detail'), {code: code === true ? '23505' : code});
             return {rows: [], rowCount: 1};
         },
         release() {},
@@ -27,7 +30,16 @@ async function start(t, fail) {
     let connections = 0;
     const pool = {
         // the session lookup of /api/auth/me reads the account the registration inserted
-        async query(_sql, [id]) { return {rows: sessions.has(id) ? [sessions.get(id)] : []}; },
+        async query(sql, values) {
+            if (sql.includes('FROM "ssot"."materias"')) {
+                // como la base: completo si entra en el límite; si no, las coincidencias hasta el límite
+                catalogQueries.push(values);
+                const [limite, q] = values;
+                const filas = catalogo.length <= limite ? catalogo : catalogo.filter(m => textoBuscable(m).includes(textoBuscable(q))).slice(0, limite);
+                return {rows: filas.map(materia => ({materia, total: catalogo.length}))};
+            }
+            return {rows: sessions.has(values[0]) ? [sessions.get(values[0])] : []};
+        },
         async connect() { connections++; return client; },
     };
     const app = express();
@@ -37,14 +49,14 @@ async function start(t, fail) {
     const server = await new Promise(resolve => { const listening = app.listen(0, '127.0.0.1', () => resolve(listening)); });
     t.after(() => new Promise(resolve => server.close(resolve)));
     const base = `http://127.0.0.1:${server.address().port}`;
-    const inserted = table => {
-        const statement = statements.find(({sql}) => sql.startsWith(`INSERT INTO "ssot"."${table}"`));
-        if (!statement) return undefined;
+    const row = statement => {
         const names = statement.sql.match(/\(([^)]+)\)/)[1].split(', ').map(name => name.replaceAll('"', ''));
         return Object.fromEntries(names.map((name, i) => [name, statement.values[i]]));
     };
+    const insertedAll = table => statements.filter(({sql}) => sql.startsWith(`INSERT INTO "ssot"."${table}"`)).map(row);
+    const inserted = table => insertedAll(table)[0];
     return {
-        statements, inserted, connections: () => connections,
+        statements, inserted, insertedAll, catalogQueries, connections: () => connections,
         remember: row => sessions.set(row.id, {id: row.id, usuario: row.usuario, rol: row.rol, version_sesion: row.version_sesion}),
         request: (path, method = 'GET', body, token) => fetch(base + path, {method,
             headers: {'Content-Type': 'application/json', ...(token ? {Authorization: `Bearer ${token}`} : {})},
@@ -96,6 +108,43 @@ test('a docente can register without availability or description yet', async t =
     assert.equal(inserted('alumnos'), undefined);
 });
 
+test('the subject catalog is public and comes complete while it fits the client limit', async t => {
+    const {request} = await start(t);
+    const response = await request('/api/registro/materias');
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {materias: ['Álgebra', 'Física'], completo: true});
+});
+
+test('a large subject catalog is searched on the server, like the spreadsheet', async t => {
+    const catalogo = Array.from({length: 250}, (_, i) => `Materia ${String(i).padStart(3, '0')}`);
+    const {request, catalogQueries} = await start(t, undefined, catalogo);
+    const sinBuscar = await (await request('/api/registro/materias')).json();
+    assert.equal(sinBuscar.completo, false);
+    assert.equal(sinBuscar.materias.length, 200);
+    assert.deepEqual(await (await request('/api/registro/materias?q=%20materia%2012')).json(),
+        {materias: [...Array.from({length: 10}, (_, i) => `Materia 12${i}`)], completo: false});
+    assert.deepEqual(catalogQueries.at(-1), [200, 'materia 12']);
+    for (const q of ['?q=a&q=b', `?q=${'x'.repeat(65)}`]) assert.equal((await request(`/api/registro/materias${q}`)).status, 400);
+});
+
+test('a docente can register with the subjects they teach, in the same transaction', async t => {
+    const {request, statements, inserted, insertedAll} = await start(t);
+    const response = await request('/api/registro', 'POST', {...docente, materias: ['Álgebra', 'Física']});
+    assert.equal(response.status, 201);
+    assert.deepEqual(statements.map(({sql}) => sql.split(' (')[0]), ['BEGIN', 'INSERT INTO "ssot"."usuarios"',
+        'INSERT INTO "ssot"."docentes"', 'INSERT INTO "ssot"."dictados"', 'INSERT INTO "ssot"."dictados"', 'COMMIT']);
+    const id = inserted('usuarios').id;
+    assert.deepEqual(insertedAll('dictados'), [{docente: id, materia: 'Álgebra'}, {docente: id, materia: 'Física'}]);
+});
+
+test('a subject that is not in the catalog is reported and rolls back', async t => {
+    const {request, statements} = await start(t, sql => sql.includes('"dictados"') && '23503');
+    const response = await request('/api/registro', 'POST', {...docente, materias: ['Astrología']});
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {error: 'Alguna de las materias elegidas no existe.'});
+    assert.equal(statements.at(-1).sql, 'ROLLBACK');
+});
+
 test('invalid registrations fail before opening a connection', async t => {
     const {request, connections} = await start(t);
     for (const body of [
@@ -112,6 +161,11 @@ test('invalid registrations fail before opening a connection', async t => {
         {...alumno, perfil: {...alumno.perfil, rol: 'alumno'}},
         {...alumno, perfil: {nivel_academico: 'doctorado'}},
         {...alumno, perfil: docente.perfil},
+        {...alumno, materias: ['Álgebra']},
+        {...docente, materias: 'Álgebra'},
+        {...docente, materias: ['Álgebra', 'Álgebra']},
+        {...docente, materias: [1]},
+        {...docente, materias: Array.from({length: 31}, (_, i) => `Materia ${i}`)},
     ]) {
         const response = await request('/api/registro', 'POST', body);
         assert.equal(response.status, 400, JSON.stringify(body));
